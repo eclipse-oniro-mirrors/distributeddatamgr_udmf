@@ -21,12 +21,18 @@
 #include <iterator>
 
 #include "logger.h"
+#include "preset_type_descriptors.h"
+#include "type_descriptor.h"
+#include "udmf_types_util.h"
 #include "unified_meta.h"
 #include "unified_record.h"
+#include "utd_client.h"
+#include "utd_graph.h"
+#include "file_uri.h"
 
 namespace OHOS {
 namespace UDMF {
-constexpr UDType FILE_SUMMARY_TYPES[] = { FILE, AUDIO, FOLDER, IMAGE, VIDEO };
+constexpr UDType FILE_SUMMARY_TYPES[] = { FILE, FILE_URI, AUDIO, FOLDER, IMAGE, VIDEO };
 constexpr size_t MAX_FILENAME_EXTENSION_SIZE = 127;
 
 std::shared_ptr<Object> GetObjectFromRecord(const std::shared_ptr<UnifiedRecord> &record)
@@ -84,6 +90,12 @@ std::string ExtractFileExtension(const std::string &uri)
 
     std::string path = uri;
 
+    AppFileService::ModuleFileUri::FileUri fileUri(path);
+    std::string realPath = fileUri.GetRealPath();
+    if (!realPath.empty()) {
+        path = realPath;
+    }
+
     auto posQuery = path.find_first_of("?#");
     if (posQuery != std::string::npos) {
         path = path.substr(0, posQuery);
@@ -131,6 +143,47 @@ std::vector<std::string> CollectFilenameExtensions(const UnifiedData &data)
         }
         if (std::find(result.begin(), result.end(), extension) == result.end()) {
             result.emplace_back(extension);
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> CollectFilenameExtensionsByTypes(const std::set<std::string> &types)
+{
+    std::vector<std::string> result;
+    for (const auto &type : types) {
+        std::shared_ptr<TypeDescriptor> descriptor;
+        if (UtdClient::GetInstance().GetTypeDescriptor(type, descriptor) != E_OK || descriptor == nullptr) {
+            continue;
+        }
+        for (const auto &extension : descriptor->GetFilenameExtensions()) {
+            if (std::find(result.begin(), result.end(), extension) == result.end()) {
+                result.emplace_back(extension);
+            }
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> CollectFilenameExtensionsByTypesWithSubtypes(const std::set<std::string> &types)
+{
+    std::vector<std::string> result = CollectFilenameExtensionsByTypes(types);
+    auto &presetTypes = PresetTypeDescriptors::GetInstance().GetPresetTypes();
+    for (const auto &cfg : presetTypes) {
+        bool isSubType = false;
+        for (const auto &type : types) {
+            if (UtdGraph::GetInstance().IsLowerLevelType(type, cfg.typeId)) {
+                isSubType = true;
+                break;
+            }
+        }
+        if (!isSubType) {
+            continue;
+        }
+        for (const auto &extension : cfg.filenameExtensions) {
+            if (std::find(result.begin(), result.end(), extension) == result.end()) {
+                result.emplace_back(extension);
+            }
         }
     }
     return result;

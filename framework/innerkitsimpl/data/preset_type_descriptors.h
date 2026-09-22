@@ -23,8 +23,8 @@ namespace OHOS {
 namespace UDMF {
 class PresetTypeDescriptors {
 public:
-    static PresetTypeDescriptors &GetInstance();
-    std::vector<TypeDescriptorCfg> &GetPresetTypes();
+    static API_EXPORT PresetTypeDescriptors &GetInstance();
+    API_EXPORT std::vector<TypeDescriptorCfg> &GetPresetTypes();
 private:
     PresetTypeDescriptors();
     ~PresetTypeDescriptors();

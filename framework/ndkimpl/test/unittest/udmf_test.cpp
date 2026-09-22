@@ -27,6 +27,7 @@
 #include "unified_data.h"
 #include "unified_record.h"
 #include "udmf_capi_common.h"
+#include "ndk_data_conversion.h"
 #include "udmf_client.h"
 #include "plain_text.h"
 #include "uri_permission_util.h"
@@ -4645,6 +4646,7 @@ HWTEST_F(UDMFTest, OH_UDMF_GetSummaryOverviewTypes_001, TestSize.Level1)
 
     summary->summary_->summary["general.file"] = 100;
     summary->summary_->summary["general.image"] = 200;
+    summary->summary_->summary["general.video"] = 300;
     summary->overviewTypePtrs_.clear();
     for (const auto &item : summary->summary_->summary) {
         summary->overviewTypePtrs_.push_back(item.first.c_str());
@@ -4652,7 +4654,35 @@ HWTEST_F(UDMFTest, OH_UDMF_GetSummaryOverviewTypes_001, TestSize.Level1)
     int ret = OH_UDMF_GetSummaryOverviewTypes(summary, &types, &count);
     EXPECT_EQ(ret, UDMF_E_OK);
     EXPECT_NE(types, nullptr);
-    EXPECT_EQ(count, 2);
+    ASSERT_EQ(count, 3);
+    if (count == 3) {
+        EXPECT_STREQ(types[0], "general.file");
+        EXPECT_STREQ(types[1], "general.image");
+        EXPECT_STREQ(types[2], "general.video");
+    }
+
+    OH_UDMF_DestroySummary(summary);
+}
+
+/**
+ * @tc.name: OH_UDMF_GetSummaryOverviewTypes_002
+ * @tc.desc: Test OH_UDMF_GetSummaryOverviewTypes with empty overview and invalid params
+ * @tc.type: FUNC
+ */
+HWTEST_F(UDMFTest, OH_UDMF_GetSummaryOverviewTypes_002, TestSize.Level1)
+{
+    OH_UDMF_Summary* summary = OH_UDMF_CreateSummary();
+    ASSERT_NE(summary, nullptr);
+
+    const char* const* types = nullptr;
+    int64_t count = 0;
+    int ret = OH_UDMF_GetSummaryOverviewTypes(summary, &types, &count);
+    EXPECT_EQ(ret, UDMF_E_OK);
+    EXPECT_EQ(types, nullptr);
+    EXPECT_EQ(count, 0);
+
+    ret = OH_UDMF_GetSummaryOverviewTypes(nullptr, &types, &count);
+    EXPECT_EQ(ret, UDMF_E_INVALID_PARAM);
 
     OH_UDMF_DestroySummary(summary);
 }
@@ -4673,11 +4703,49 @@ HWTEST_F(UDMFTest, OH_UDMF_GetSummaryOverviewSize_001, TestSize.Level1)
     EXPECT_EQ(OH_UDMF_GetSummaryOverviewSize(summary, "general.file", nullptr), UDMF_E_INVALID_PARAM);
 
     summary->summary_->summary["general.file"] = 100;
+    summary->summary_->summary["general.image"] = 200;
+    summary->summary_->summary["general.text"] = 0;
+    summary->summary_->summary["general.video"] = 300;
     EXPECT_EQ(OH_UDMF_GetSummaryOverviewSize(summary, "general.file", &dataSize), UDMF_E_OK);
     EXPECT_EQ(dataSize, 100);
+ 
+    dataSize = -1;
+    EXPECT_EQ(OH_UDMF_GetSummaryOverviewSize(summary, "general.image", &dataSize), UDMF_E_OK);
+    EXPECT_EQ(dataSize, 200);
+ 
+    dataSize = -1;
+    EXPECT_EQ(OH_UDMF_GetSummaryOverviewSize(summary, "general.text", &dataSize), UDMF_E_OK);
+    EXPECT_EQ(dataSize, 0);
+ 
+    dataSize = -1;
+    EXPECT_EQ(OH_UDMF_GetSummaryOverviewSize(summary, "general.video", &dataSize), UDMF_E_OK);
+    EXPECT_EQ(dataSize, 300);
+ 
+    dataSize = -1;
     EXPECT_EQ(OH_UDMF_GetSummaryOverviewSize(summary, "general.audio", &dataSize), UDMF_ERR);
     EXPECT_EQ(dataSize, -1);
 
+    OH_UDMF_DestroySummary(summary);
+}
+
+/**
+ * @tc.name: OH_UDMF_GetSummaryOverviewSize_002
+ * @tc.desc: Test OH_UDMF_GetSummaryOverviewSize with an empty overview and invalid params
+ * @tc.type: FUNC
+ */
+HWTEST_F(UDMFTest, OH_UDMF_GetSummaryOverviewSize_002, TestSize.Level1)
+{
+    OH_UDMF_Summary* summary = OH_UDMF_CreateSummary();
+    ASSERT_NE(summary, nullptr);
+ 
+    int64_t dataSize = 123;
+    int ret = OH_UDMF_GetSummaryOverviewSize(summary, "general.file", &dataSize);
+    EXPECT_EQ(ret, UDMF_ERR);
+    EXPECT_EQ(dataSize, -1);
+ 
+    ret = OH_UDMF_GetSummaryOverviewSize(nullptr, "general.file", &dataSize);
+    EXPECT_EQ(ret, UDMF_E_INVALID_PARAM);
+ 
     OH_UDMF_DestroySummary(summary);
 }
 
@@ -4775,6 +4843,59 @@ HWTEST_F(UDMFTest, OH_UDMF_GetSummaryOverviewSize_ZeroByte001, TestSize.Level1)
     ret = OH_UDMF_GetSummaryOverviewSize(summary, "general.audio", &dataSize);
     EXPECT_EQ(ret, UDMF_ERR);
 
+    OH_UDMF_DestroySummary(summary);
+}
+
+/**
+ * @tc.name: OH_UDMF_Summary_Repopulate_001
+ * @tc.desc: Re-querying after repopulation returns updated data instead of stale borrowed pointers
+ * @tc.type: FUNC
+ */
+HWTEST_F(UDMFTest, OH_UDMF_Summary_Repopulate_001, TestSize.Level1)
+{
+    OH_UDMF_Summary* summary = OH_UDMF_CreateSummary();
+    ASSERT_NE(summary, nullptr);
+ 
+    Summary source;
+    source.summary["general.file"] = 100;
+    source.filenameExtensions = { ".txt" };
+    EXPECT_EQ(NdkDataConversion::GetNdkSummary(source, summary), Status::E_OK);
+ 
+    const char* const* types = nullptr;
+    int64_t count = 0;
+    EXPECT_EQ(OH_UDMF_GetSummaryOverviewTypes(summary, &types, &count), UDMF_E_OK);
+    ASSERT_EQ(count, 1);
+    if (count == 1) {
+        EXPECT_STREQ(types[0], "general.file");
+    }
+ 
+    const char* const* extensions = nullptr;
+    EXPECT_EQ(OH_UDMF_GetSummaryFilenameExtensions(summary, &extensions, &count), UDMF_E_OK);
+    ASSERT_EQ(count, 1);
+    if (count == 1) {
+        EXPECT_STREQ(extensions[0], ".txt");
+    }
+ 
+    Summary updated;
+    updated.summary["general.audio"] = 200;
+    updated.summary["general.image"] = 300;
+    updated.filenameExtensions = { ".png", ".jpg" };
+    EXPECT_EQ(NdkDataConversion::GetNdkSummary(updated, summary), Status::E_OK);
+ 
+    EXPECT_EQ(OH_UDMF_GetSummaryOverviewTypes(summary, &types, &count), UDMF_E_OK);
+    ASSERT_EQ(count, 2);
+    if (count == 2) {
+        EXPECT_STREQ(types[0], "general.audio");
+        EXPECT_STREQ(types[1], "general.image");
+    }
+ 
+    EXPECT_EQ(OH_UDMF_GetSummaryFilenameExtensions(summary, &extensions, &count), UDMF_E_OK);
+    ASSERT_EQ(count, 2);
+    if (count == 2) {
+        EXPECT_STREQ(extensions[0], ".png");
+        EXPECT_STREQ(extensions[1], ".jpg");
+    }
+ 
     OH_UDMF_DestroySummary(summary);
 }
 }
