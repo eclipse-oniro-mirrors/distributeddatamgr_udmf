@@ -24,15 +24,16 @@
 #include "graph.h"
 #include "utd_common.h"
 #include "preset_type_descriptors.h"
+#include "visibility.h"
 
 namespace OHOS {
 namespace UDMF {
 class UtdGraph {
 public:
-    static UtdGraph &GetInstance();
-    bool IsValidType(const std::string &node);
+    static API_EXPORT UtdGraph &GetInstance();
+    bool API_EXPORT IsValidType(const std::string &node);
     void InitUtdGraph(const std::vector<TypeDescriptorCfg> &descriptorCfgs);
-    bool IsLowerLevelType(const std::string &lowerLevelType, const std::string &heigitLevelType);
+    bool API_EXPORT IsLowerLevelType(const std::string &lowerLevelType, const std::string &heigitLevelType);
     std::unique_ptr<Graph> ConstructNewGraph(const std::vector<TypeDescriptorCfg> &descriptorCfgs);
     void Update(std::unique_ptr<Graph> graph);
 private:

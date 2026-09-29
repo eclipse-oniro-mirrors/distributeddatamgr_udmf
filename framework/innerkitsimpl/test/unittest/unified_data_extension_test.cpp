@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <set>
 #include <string>
 
 #include "audio.h"
@@ -232,6 +233,22 @@ HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensions_FileUriCaseDedup010
     EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".jpg"), extensions.end());
     EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".png"), extensions.end());
 }
+/**
+ * @tc.name: CollectFilenameExtensions_PercentEncoded011
+ * @tc.desc: File records with percent-encoded filename characters yield decoded extensions
+ * @tc.type: FUNC
+ */
+HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensions_PercentEncoded011, TestSize.Level1)
+{
+    UnifiedData data;
+    data.AddRecord(std::make_shared<File>("file:///data/report.t%78t"));
+    data.AddRecord(std::make_shared<File>("file:///data/picture.p%6eg"));
+ 
+    auto extensions = CollectFilenameExtensions(data);
+    ASSERT_EQ(extensions.size(), 2);
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".txt"), extensions.end());
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".png"), extensions.end());
+}
 
 /**
  * @tc.name: CollectFilenameExtensions003
@@ -314,5 +331,35 @@ HWTEST_F(UnifiedDataExtensionTest, ExtractFileExtension_Backslash004, TestSize.L
 {
     std::string backslashUri = "file:///data\\storage\\101.png";
     EXPECT_EQ(ExtractFileExtension(backslashUri), ".png");
+}
+
+/**
+ * @tc.name: CollectFilenameExtensionsByTypes_Normal001
+ * @tc.desc: Collect distinct extensions from a set of type ids
+ * @tc.type: FUNC
+ */
+HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensionsByTypes_Normal001, TestSize.Level1)
+{
+    std::set<std::string> types = { "general.png", "general.jpeg" };
+    auto extensions = CollectFilenameExtensionsByTypes(types);
+    ASSERT_EQ(extensions.size(), 4);
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".png"), extensions.end());
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".jpg"), extensions.end());
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".jpeg"), extensions.end());
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".jpe"), extensions.end());
+}
+
+/**
+ * @tc.name: CollectFilenameExtensionsByTypes_BaseAndText002
+ * @tc.desc: Base file type yields no extensions, text type yields its own
+ * @tc.type: FUNC
+ */
+HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensionsByTypes_BaseAndText002, TestSize.Level1)
+{
+    std::set<std::string> types = { "general.file", "general.plain-text" };
+    auto extensions = CollectFilenameExtensionsByTypes(types);
+    ASSERT_EQ(extensions.size(), 2);
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".txt"), extensions.end());
+    EXPECT_NE(std::find(extensions.begin(), extensions.end(), ".text"), extensions.end());
 }
 } // OHOS::Test

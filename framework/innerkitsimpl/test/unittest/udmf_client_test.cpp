@@ -5068,6 +5068,73 @@ HWTEST_F(UdmfClientTest, HtmlData001, TestSize.Level1)
 }
 
 /**
+ * @tc.name: GetSummary_FilenameExtensions_WithParams001
+ * @tc.desc: File uris carrying network params still yield their extensions
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientTest, GetSummary_FilenameExtensions_WithParams001, TestSize.Level1)
+{
+    LOG_INFO(UDMF_TEST, "GetSummary_FilenameExtensions_WithParams001 begin.");
+ 
+    CustomOption option = { .intention = Intention::UD_INTENTION_DRAG };
+    UnifiedData data;
+    data.AddRecord(std::make_shared<File>("file:///data/photo.png?networkid=device01"));
+    data.AddRecord(std::make_shared<File>("file:///data/movie.mp4?networkid=device01&token=abc"));
+ 
+    std::string key;
+    auto status = UdmfClient::GetInstance().SetData(option, data, key);
+    ASSERT_EQ(status, E_OK);
+ 
+    QueryOption query = { .key = key };
+    Summary summary;
+    status = UdmfClient::GetInstance().GetSummary(query, summary);
+    ASSERT_EQ(status, E_OK);
+ 
+    auto extensions = summary.filenameExtensions;
+    EXPECT_EQ(extensions.size(), 2);
+    if (extensions.size() == 2) {
+        EXPECT_EQ(extensions[0], ".png");
+        EXPECT_EQ(extensions[1], ".mp4");
+    }
+    LOG_INFO(UDMF_TEST, "GetSummary_FilenameExtensions_WithParams001 end.");
+}
+ 
+/**
+ * @tc.name: GetSummary_FilenameExtensions_GetDataFail001
+ * @tc.desc: A failed GetData yields no filename extension
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientTest, GetSummary_FilenameExtensions_GetDataFail001, TestSize.Level1)
+{
+    LOG_INFO(UDMF_TEST, "GetSummary_FilenameExtensions_GetDataFail001 begin.");
+ 
+    CustomOption option = { .intention = Intention::UD_INTENTION_DRAG };
+    UnifiedData data;
+    data.AddRecord(std::make_shared<File>("file:///data/test.jpg"));
+ 
+    std::string key;
+    auto status = UdmfClient::GetInstance().SetData(option, data, key);
+    ASSERT_EQ(status, E_OK);
+ 
+    QueryOption query = { .key = key };
+    Summary summary;
+    status = UdmfClient::GetInstance().GetSummary(query, summary);
+    ASSERT_EQ(status, E_OK);
+    ASSERT_EQ(summary.filenameExtensions.size(), 1u);
+ 
+    // GetData fails with an invalid key, so the summary yields no extension.
+    QueryOption invalidQuery = { .key = "udmf://drag/bundle" };
+    UnifiedData readData;
+    status = UdmfClient::GetInstance().GetData(invalidQuery, readData);
+    EXPECT_EQ(status, E_INVALID_PARAMETERS);
+ 
+    Summary Summary;
+    UnifiedDataHelper::GetSummary(readData, Summary);
+    EXPECT_TRUE(Summary.filenameExtensions.empty());
+    LOG_INFO(UDMF_TEST, "GetSummary_FilenameExtensions_GetDataFail001 end.");
+}
+
+/**
 * @tc.name: GetSummary008
 * @tc.desc: Normal test of GetSummary, key is in dataCache_
 * @tc.type: FUNC
