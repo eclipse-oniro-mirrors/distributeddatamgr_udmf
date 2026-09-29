@@ -21,13 +21,10 @@
 #include <iterator>
 
 #include "logger.h"
-#include "preset_type_descriptors.h"
 #include "type_descriptor.h"
-#include "udmf_types_util.h"
 #include "unified_meta.h"
 #include "unified_record.h"
 #include "utd_client.h"
-#include "utd_graph.h"
 #include "file_uri.h"
 
 namespace OHOS {
@@ -157,30 +154,6 @@ std::vector<std::string> CollectFilenameExtensionsByTypes(const std::set<std::st
             continue;
         }
         for (const auto &extension : descriptor->GetFilenameExtensions()) {
-            if (std::find(result.begin(), result.end(), extension) == result.end()) {
-                result.emplace_back(extension);
-            }
-        }
-    }
-    return result;
-}
-
-std::vector<std::string> CollectFilenameExtensionsByTypesWithSubtypes(const std::set<std::string> &types)
-{
-    std::vector<std::string> result = CollectFilenameExtensionsByTypes(types);
-    auto &presetTypes = PresetTypeDescriptors::GetInstance().GetPresetTypes();
-    for (const auto &cfg : presetTypes) {
-        bool isSubType = false;
-        for (const auto &type : types) {
-            if (UtdGraph::GetInstance().IsLowerLevelType(type, cfg.typeId)) {
-                isSubType = true;
-                break;
-            }
-        }
-        if (!isSubType) {
-            continue;
-        }
-        for (const auto &extension : cfg.filenameExtensions) {
             if (std::find(result.begin(), result.end(), extension) == result.end()) {
                 result.emplace_back(extension);
             }

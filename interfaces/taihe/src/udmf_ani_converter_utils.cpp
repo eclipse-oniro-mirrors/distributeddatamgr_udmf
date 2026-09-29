@@ -175,6 +175,27 @@ ani_object AniConverter::WrapSummary(ani_env *env, std::shared_ptr<Summary> summ
         return obj;
     }
     InnerWrapMapParams(env, cls, obj, summary->summary);
+    ani_ref initValue = {};
+    env->GetUndefined(&initValue);
+    ani_array extArray = {};
+    if (ANI_OK != env->Array_New(summary->filenameExtensions.size(), initValue, &extArray)) {
+        LOG_ERROR(UDMF_ANI, "Create array fail");
+        return obj;
+    }
+    ani_size index = 0;
+    for (const auto &ext : summary->filenameExtensions) {
+        ani_object aniExt = {};
+        if (ANI_OK != SetString(env, ext, aniExt)) {
+            LOG_ERROR(UDMF_ANI, "SetString fail");
+            return obj;
+        }
+        env->Array_Set(extArray, index, aniExt);
+        index++;
+    }
+    if (!SetFieldRef(env, cls, obj, "filenameExtensions", static_cast<ani_ref>(extArray))) {
+        LOG_ERROR(UDMF_ANI, "Set filenameExtensions field failed");
+        return obj;
+    }
     return obj;
 }
 
