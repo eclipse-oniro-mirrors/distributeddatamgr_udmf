@@ -4865,7 +4865,7 @@ HWTEST_F(UdmfClientTest, GetSummary_FilenameExtensions_NonFile001, TestSize.Leve
 
 /**
  * @tc.name: GetSummary_FilenameExtensions_NonLocalUri001
- * @tc.desc: Non file:// urn is ignored and yields no extension
+ * @tc.desc: Non file:// uri still yields its extension
  * @tc.type: FUNC
  */
 HWTEST_F(UdmfClientTest, GetSummary_FilenameExtensions_NonLocalUri001, TestSize.Level1)
@@ -4885,7 +4885,11 @@ HWTEST_F(UdmfClientTest, GetSummary_FilenameExtensions_NonLocalUri001, TestSize.
     status = UdmfClient::GetInstance().GetSummary(query, summary);
     ASSERT_EQ(status, E_OK);
 
-    EXPECT_TRUE(summary.filenameExtensions.empty());
+    auto extensions = summary.filenameExtensions;
+    EXPECT_EQ(extensions.size(), 1);
+    if (!extensions.empty()) {
+        EXPECT_EQ(extensions[0], ".jpg");
+    }
     LOG_INFO(UDMF_TEST, "GetSummary_FilenameExtensions_NonLocalUri001 end.");
 }
 

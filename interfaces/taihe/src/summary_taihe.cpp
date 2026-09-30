@@ -105,6 +105,7 @@ int64_t SummaryTaihe::GetInner()
     }
     return ConvertStringVectorToTaiheArray(this->value_->filenameExtensions);
 }
+
 ::taiheChannel::Summary CreateSummary()
 {
     return taihe::make_holder<SummaryTaihe, ::taiheChannel::Summary>();
