@@ -131,9 +131,6 @@ std::vector<std::string> CollectFilenameExtensions(const UnifiedData &data)
         if (uri.empty()) {
             continue;
         }
-        if (uri.find("file://") != 0) {
-            continue;
-        }
         std::string extension = ExtractFileExtension(uri);
         if (extension.empty()) {
             continue;

@@ -99,9 +99,12 @@ int64_t SummaryTaihe::GetInner()
 
 ::taihe::array<::taihe::string> SummaryTaihe::GetFilenameExtensions()
 {
+    if (!this->value_) {
+        LOG_ERROR(UDMF_ANI, "value_ is null in GetFilenameExtensions");
+        return {};
+    }
     return ConvertStringVectorToTaiheArray(this->value_->filenameExtensions);
 }
-
 ::taiheChannel::Summary CreateSummary()
 {
     return taihe::make_holder<SummaryTaihe, ::taiheChannel::Summary>();
