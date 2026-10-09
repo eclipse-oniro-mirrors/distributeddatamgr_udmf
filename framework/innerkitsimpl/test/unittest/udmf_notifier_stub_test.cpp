@@ -203,57 +203,6 @@ HWTEST_F(UdmfNotifierStubTest, UdmfNotifierStub_OnRemoteRequest_UnmarshalFailed_
 }
 
 /**
-* @tc.name: IsValidProcessName_ValidProcess_001
-* @tc.desc: Test IsValidProcessName with valid process name "distributeddata"
-* @tc.type: FUNC
-*/
-HWTEST_F(UdmfNotifierStubTest, IsValidProcessName_ValidProcess_001, TestSize.Level1)
-{
-    SetNativeToken("distributeddata");
-    bool result = DelayDataCallbackStub::IsValidProcessName();
-    EXPECT_TRUE(result);
-}
-
-/**
-* @tc.name: IsValidProcessName_InvalidProcess_001
-* @tc.desc: Test IsValidProcessName with invalid process name
-* @tc.type: FUNC
-*/
-HWTEST_F(UdmfNotifierStubTest, IsValidProcessName_InvalidProcess_001, TestSize.Level1)
-{
-    SetNativeToken("foundation");
-    bool result = DelayDataCallbackStub::IsValidProcessName();
-    EXPECT_FALSE(result);
-}
-
-/**
-* @tc.name: IsValidProcessName_NonNativeToken_001
-* @tc.desc: Test IsValidProcessName with non-native token
-* @tc.type: FUNC
-*/
-HWTEST_F(UdmfNotifierStubTest, IsValidProcessName_NonNativeToken_001, TestSize.Level1)
-{
-    HapInfoParams info = {
-        .userID = 100,
-        .bundleName = "ohos.test.demo",
-        .instIndex = 0,
-        .appIDDesc = "ohos.test.demo"
-    };
-    HapPolicyParams policy = {
-        .apl = APL_NORMAL,
-        .domain = "test.domain"
-    };
-    auto tokenIDEx = AccessTokenKit::AllocHapToken(info, policy);
-    SetSelfTokenID(tokenIDEx.tokenIDEx);
-
-    bool result = DelayDataCallbackStub::IsValidProcessName();
-    EXPECT_FALSE(result);
-
-    auto tokenId = AccessTokenKit::GetHapTokenID(100, "ohos.test.demo", 0);
-    AccessTokenKit::DeleteToken(tokenId);
-}
-
-/**
 * @tc.name: DelayDataCallback_OnRemoteRequest_ValidProcess_001
 * @tc.desc: Test DelayDataCallback OnRemoteRequest with valid process name
 * @tc.type: FUNC
@@ -282,35 +231,4 @@ HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_OnRemoteRequest_ValidProcess_00
     int ret = client.OnRemoteRequest(code, data, reply, option);
     EXPECT_EQ(ret, 0);
 }
-
-/**
-* @tc.name: DelayDataCallback_OnRemoteRequest_InvalidProcess_001
-* @tc.desc: Test DelayDataCallback OnRemoteRequest with invalid process name
-* @tc.type: FUNC
-*/
-HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_OnRemoteRequest_InvalidProcess_001, TestSize.Level1)
-{
-    SetNativeToken("foundation");
-
-    uint32_t code = 0;
-    MessageParcel data;
-    MessageParcel reply;
-    MessageOption option;
-
-    auto callback = [](const std::string &key, const UnifiedData &data) {};
-    DelayDataCallbackClient client(callback);
-
-    data.WriteInterfaceToken(DelayDataCallbackClient::GetDescriptor());
-
-    std::string key = "test_key";
-    UnifiedData unifiedData;
-
-    if (!ITypesUtil::Marshal(data, key, unifiedData)) {
-        FAIL() << "Marshal failed";
-    }
-
-    int ret = client.OnRemoteRequest(code, data, reply, option);
-    EXPECT_NE(ret, 0);
-}
-
 } // namespace OHOS::UDMF

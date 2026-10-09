@@ -468,10 +468,10 @@ HWTEST_F(UnifiedDataHelperTest, GetSummary_FileExtensions002, TestSize.Level1)
 }
 
 /**
-* @tc.name: GetSummary_FileExtensions003
-* @tc.desc: Test GetSummary with non-file URI
-* @tc.type: FUNC
-*/
+ * @tc.name: GetSummary_FileExtensions003
+ * @tc.desc: Test GetSummary with non-file URI yields extension
+ * @tc.type: FUNC
+ */
 HWTEST_F(UnifiedDataHelperTest, GetSummary_FileExtensions003, TestSize.Level1)
 {
     LOG_INFO(UDMF_TEST, "GetSummary_FileExtensions003 begin.");
@@ -483,7 +483,10 @@ HWTEST_F(UnifiedDataHelperTest, GetSummary_FileExtensions003, TestSize.Level1)
     UnifiedDataHelper::GetSummary(data, summary);
 
     auto extensions = summary.filenameExtensions;
-    EXPECT_TRUE(extensions.empty());
+    EXPECT_EQ(extensions.size(), 1);
+    if (!extensions.empty()) {
+        EXPECT_EQ(extensions[0], ".jpg");
+    }
     LOG_INFO(UDMF_TEST, "GetSummary_FileExtensions003 end.");
 }
 
@@ -538,7 +541,7 @@ HWTEST_F(UnifiedDataHelperTest, GetSummary_FileExtensions005, TestSize.Level1)
 
 /**
  * @tc.name: GetSummary_FileExtensions006
- * @tc.desc: Test GetSummary skips non-file URI of a general.file-uri record
+ * @tc.desc: Test GetSummary yields extension for non-file URI of a general.file-uri record
  * @tc.type: FUNC
  */
 HWTEST_F(UnifiedDataHelperTest, GetSummary_FileExtensions006, TestSize.Level1)
@@ -552,7 +555,10 @@ HWTEST_F(UnifiedDataHelperTest, GetSummary_FileExtensions006, TestSize.Level1)
     Summary summary;
     UnifiedDataHelper::GetSummary(data, summary);
 
-    EXPECT_TRUE(summary.filenameExtensions.empty());
+    EXPECT_EQ(summary.filenameExtensions.size(), 1);
+    if (!summary.filenameExtensions.empty()) {
+        EXPECT_EQ(summary.filenameExtensions[0], ".jpg");
+    }
     LOG_INFO(UDMF_TEST, "GetSummary_FileExtensions006 end.");
 }
 
@@ -790,7 +796,7 @@ HWTEST_F(UnifiedDataHelperTest, GetSummary_FilenameExtensions_LargeFile001, Test
 
 /**
  * @tc.name: GetSummary_FilenameExtensions_NonFileScheme001
- * @tc.desc: Test non file:// scheme and relative path yield empty extensions
+ * @tc.desc: Test non file:// scheme and relative path yield their extensions
  * @tc.type: FUNC
  */
 HWTEST_F(UnifiedDataHelperTest, GetSummary_FilenameExtensions_NonFileScheme001, TestSize.Level1)
@@ -807,7 +813,12 @@ HWTEST_F(UnifiedDataHelperTest, GetSummary_FilenameExtensions_NonFileScheme001, 
     Summary summary;
     UnifiedDataHelper::GetSummary(data, summary);
     auto extensions = summary.filenameExtensions;
-    EXPECT_TRUE(extensions.empty());
+    EXPECT_EQ(extensions.size(), 3);
+    if (extensions.size() == 3) {
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".png") != extensions.end());
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".jpg") != extensions.end());
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".txt") != extensions.end());
+    }
     LOG_INFO(UDMF_TEST, "GetSummary_FilenameExtensions_NonFileScheme001 end.");
 }
 

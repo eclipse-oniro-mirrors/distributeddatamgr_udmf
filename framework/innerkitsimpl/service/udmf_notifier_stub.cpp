@@ -15,7 +15,6 @@
 #define LOG_TAG "UdmfNotifierStub"
 #include "udmf_notifier_stub.h"
 
-#include "accesstoken_kit.h"
 #include "error_code.h"
 #include "ipc_skeleton.h"
 #include "logger.h"
@@ -28,28 +27,6 @@
 
 namespace OHOS {
 namespace UDMF {
-constexpr const char *DISTRIBUTED_DATA_MGR_PROCESS_NAME = "distributeddata";
-
-bool DelayDataCallbackStub::IsValidProcessName()
-{
-    if (!UTILS::IsNativeCallingToken()) {
-        LOG_ERROR(UDMF_SERVICE, "Permission denied: calling token is not native.");
-        return false;
-    }
-    Security::AccessToken::NativeTokenInfo nativeInfo;
-    uint32_t tokenId = IPCSkeleton::GetCallingTokenID();
-    if (Security::AccessToken::AccessTokenKit::GetNativeTokenInfo(tokenId, nativeInfo)
-        != Security::AccessToken::AccessTokenKitRet::RET_SUCCESS) {
-        LOG_ERROR(UDMF_SERVICE, "GetNativeTokenInfo failed");
-        return false;
-    }
-    if (nativeInfo.processName != DISTRIBUTED_DATA_MGR_PROCESS_NAME) {
-        LOG_ERROR(UDMF_SERVICE, "Permission denied: expected distributeddatamgr, got %{public}s.",
-            nativeInfo.processName.c_str());
-        return false;
-    }
-    return true;
-}
 
 int32_t UdmfNotifierStub::OnRemoteRequest(uint32_t code, MessageParcel &data, MessageParcel &reply,
     MessageOption &option)
@@ -86,8 +63,9 @@ int32_t DelayDataCallbackStub::OnRemoteRequest(uint32_t code, MessageParcel &dat
     MessageOption &option)
 {
     LOG_INFO(UDMF_SERVICE, "code:%{public}u callingPid:%{public}u", code, IPCSkeleton::GetCallingPid());
-    if (!IsValidProcessName()) {
-        return E_INVALID_PARAMETERS;
+    if (!UTILS::IsNativeCallingToken()) {
+        LOG_ERROR(UDMF_SERVICE, "Permission denied: calling token is not native.");
+        return E_NO_PERMISSION;
     }
     std::u16string local = GetDescriptor();
     std::u16string remote = data.ReadInterfaceToken();

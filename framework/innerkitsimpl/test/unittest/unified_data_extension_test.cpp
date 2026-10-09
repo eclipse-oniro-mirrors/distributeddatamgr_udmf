@@ -118,7 +118,7 @@ HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensions_FileSubtypes003, Te
 
 /**
  * @tc.name: CollectFilenameExtensions_SkipNonFile004
- * @tc.desc: Non-file records and non file:// uri are skipped
+ * @tc.desc: Non-file records are skipped
  * @tc.type: FUNC
  */
 HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensions_SkipNonFile004, TestSize.Level1)
@@ -126,10 +126,32 @@ HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensions_SkipNonFile004, Tes
     UnifiedData data;
     data.AddRecord(std::make_shared<UnifiedRecord>(UDType::TEXT));
     data.AddRecord(std::make_shared<UnifiedRecord>(UDType::HTML));
-    data.AddRecord(std::make_shared<File>("http://example.com/a.jpg"));
 
     auto extensions = CollectFilenameExtensions(data);
     EXPECT_TRUE(extensions.empty());
+}
+
+/**
+ * @tc.name: CollectFilenameExtensions_NonFileScheme012
+ * @tc.desc: Non file:// uri (http, https, content, relative) records yield their extensions
+ * @tc.type: FUNC
+ */
+HWTEST_F(UnifiedDataExtensionTest, CollectFilenameExtensions_NonFileScheme012, TestSize.Level1)
+{
+    UnifiedData data;
+    data.AddRecord(std::make_shared<File>("http://example.com/a.jpg"));
+    data.AddRecord(std::make_shared<File>("https://data/storage/el2/base/haps/101.png"));
+    data.AddRecord(std::make_shared<File>("content://media/external/images/101.txt"));
+    data.AddRecord(std::make_shared<File>("data/storage/el2/base/haps/101.mp4"));
+
+    auto extensions = CollectFilenameExtensions(data);
+    EXPECT_EQ(extensions.size(), 4);
+    if (extensions.size() == 4) {
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".jpg") != extensions.end());
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".png") != extensions.end());
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".txt") != extensions.end());
+        EXPECT_TRUE(std::find(extensions.begin(), extensions.end(), ".mp4") != extensions.end());
+    }
 }
 
 /**

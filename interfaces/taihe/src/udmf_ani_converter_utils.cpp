@@ -21,6 +21,7 @@
 #include "logger.h"
 #include "ohos.data.unifiedDataChannel.proj.hpp"
 #include "ohos.data.unifiedDataChannel.impl.hpp"
+#include "summary_taihe.h"
 #include "udmf_ani_converter_utils.h"
 #include "unified_data_taihe.h"
 #include "unified_record_taihe.h"
@@ -175,27 +176,17 @@ ani_object AniConverter::WrapSummary(ani_env *env, std::shared_ptr<Summary> summ
         return obj;
     }
     InnerWrapMapParams(env, cls, obj, summary->summary);
-    ani_ref initValue = {};
-    env->GetUndefined(&initValue);
-    ani_array extArray = {};
-    if (ANI_OK != env->Array_New(summary->filenameExtensions.size(), initValue, &extArray)) {
-        LOG_ERROR(UDMF_ANI, "Create array fail");
+    ani_long ptr;
+    if (ANI_OK != env->Object_CallMethodByName_Long(obj, GET_INNER_METHOED_NAME, nullptr, &ptr)) {
+        LOG_ERROR(UDMF_ANI, "Call getInner method fail");
         return obj;
     }
-    ani_size index = 0;
-    for (const auto &ext : summary->filenameExtensions) {
-        ani_object aniExt = {};
-        if (ANI_OK != SetString(env, ext, aniExt)) {
-            LOG_ERROR(UDMF_ANI, "SetString fail");
-            return obj;
-        }
-        env->Array_Set(extArray, index, aniExt);
-        index++;
-    }
-    if (!SetFieldRef(env, cls, obj, "filenameExtensions", static_cast<ani_ref>(extArray))) {
-        LOG_ERROR(UDMF_ANI, "Set filenameExtensions field failed");
+    auto summaryImplPtr = reinterpret_cast<SummaryTaihe*>(ptr);
+    if (summaryImplPtr == nullptr) {
+        LOG_ERROR(UDMF_ANI, "summaryImplPtr is null.");
         return obj;
     }
+    summaryImplPtr->value_ = summary;
     return obj;
 }
 
