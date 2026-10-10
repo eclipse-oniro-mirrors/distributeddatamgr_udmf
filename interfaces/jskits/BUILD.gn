@@ -149,6 +149,7 @@ ohos_shared_library("uniformtypedescriptor_napi") {
     "ability_runtime:abilitykit_native",
     "ability_runtime:napi_common",
     "bounds_checking_function:libsec_shared",
+    "c_utils:utils",
     "hilog:libhilog",
     "image_framework:image",
     "ipc:ipc_core",
