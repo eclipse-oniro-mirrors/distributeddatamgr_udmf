@@ -418,7 +418,7 @@ export struct ContentFormCard {
         .constraintSize({ minWidth: this.getTextSize(TextType.APP_NAME, this.contentFormData?.appName) })
         .backgroundColor(this.getTextBackground(this.contentFormData?.appName))
         .fontWeight(FontWeight.Regular)
-        .borderRadius(this.contentFormData?.title === '' ? 0 : DEFAULT_EMPTY_TEXT_RADIUS)
+        .borderRadius(this.contentFormData?.title === '' ? 0.0 : DEFAULT_EMPTY_TEXT_RADIUS)
         .direction(this.isMirrorLanguageType ? Direction.Rtl : Direction.Ltr)
         .maxFontScale(1)
         .layoutWeight(1)
@@ -445,7 +445,7 @@ export struct ContentFormCard {
       .margin({ top: this.formStyle.titleFontMarginTop * this.cardScale } as Margin)
       .constraintSize({ minWidth: this.getTextSize(TextType.TITLE, this.contentFormData?.title) })
       .backgroundColor(this.getTextBackground(this.contentFormData?.title))
-      .borderRadius(this.contentFormData?.title === '' ? 0 : DEFAULT_EMPTY_TEXT_RADIUS)
+      .borderRadius(this.contentFormData?.title === '' ? 0.0 : DEFAULT_EMPTY_TEXT_RADIUS)
       .direction(this.isMirrorLanguageType ? Direction.Rtl : Direction.Ltr)
       .maxFontScale(1)
       .id('cardTitleText')
@@ -474,7 +474,7 @@ export struct ContentFormCard {
           .margin({ top: this.formStyle.descriptionMarginTop * this.cardScale } as Margin)
           .backgroundColor(this.getTextBackground(this.contentFormData?.description))
           .fontWeight(FontWeight.Regular)
-          .borderRadius(this.contentFormData?.description ? 0 : DEFAULT_EMPTY_TEXT_RADIUS)
+          .borderRadius(this.contentFormData?.description ? 0.0 : DEFAULT_EMPTY_TEXT_RADIUS)
           .direction(this.isMirrorLanguageType ? Direction.Rtl : Direction.Ltr)
           .maxFontScale(1)
           .id('cardDescription')
@@ -508,7 +508,7 @@ export struct ContentFormCard {
       .fontSize(this.getDescriptionFontSize() * this.cardScale)
       .constraintSize({ minWidth: this.getTextSize(TextType.DESCRIPTION, this.contentFormData?.description) })
       .backgroundColor(this.getTextBackground(this.contentFormData?.description))
-      .borderRadius(this.contentFormData?.description ? 0 : DEFAULT_EMPTY_TEXT_RADIUS)
+      .borderRadius(this.contentFormData?.description ? 0.0 : DEFAULT_EMPTY_TEXT_RADIUS)
       .onAreaChange((oldValue: Area, newValue: Area) => {
         let layoutManager: LayoutManager | undefined = this.controller.getLayoutManager();
         if (layoutManager) {
@@ -545,8 +545,8 @@ export struct ContentFormCard {
               .borderRadius(4)
               .draggable(false)
               .margin({
-                right: this.isMirrorLanguageType ? (this.formStyle.thumbMarginLeft as double * this.cardScale) : 0,
-                left: this.isMirrorLanguageType ? 0 : (this.formStyle.thumbMarginLeft as double * this.cardScale),
+                right: this.isMirrorLanguageType ? (this.formStyle.thumbMarginLeft as double * this.cardScale) : 0.0,
+                left: this.isMirrorLanguageType ? 0.0 : (this.formStyle.thumbMarginLeft as double * this.cardScale),
                 top: this.formStyle.titleFontMarginTop * this.cardScale
               } as Margin)
               .id('cardThumbImage')
@@ -592,8 +592,8 @@ export struct ContentFormCard {
                 .height(this.formStyle.thumbHeight * this.cardScale)
                 .draggable(false)
                 .margin({
-                  left: this.isMirrorLanguageType ? 0 : (this.formStyle.thumbMarginLeft as double * this.cardScale),
-                  right: this.isMirrorLanguageType ? (this.formStyle.thumbMarginLeft as double * this.cardScale) : 0
+                  left: this.isMirrorLanguageType ? 0.0 : (this.formStyle.thumbMarginLeft as double * this.cardScale),
+                  right: this.isMirrorLanguageType ? (this.formStyle.thumbMarginLeft as double * this.cardScale) : 0.0
                 } as Margin)
                 .id('cardThumbImage')
             }
