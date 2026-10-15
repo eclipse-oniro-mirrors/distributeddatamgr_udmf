@@ -313,47 +313,65 @@ char** OH_UdmfData_GetTypes(OH_UdmfData* pThis, unsigned int* count);
 OH_UdmfRecord** OH_UdmfData_GetRecords(OH_UdmfData* pThis, unsigned int* count);
 
 /**
- * @brief Describes the summary of unified data.
- *
- * @since 26.1.0
+ * @brief Summarizes the data information of the **unifiedData** object, including the data type and size.
+ * @since 26.0.1
  */
 typedef struct OH_UDMF_Summary OH_UDMF_Summary;
 
 /**
  * @brief Creates an {@link OH_UDMF_Summary} instance.
  *
- * @return Returns a pointer to the created {@link OH_UDMF_Summary} instance if the operation is successful;
- *     returns nullptr otherwise.
- * @see OH_UDMF_Summary OH_UDMF_DestroySummary.
- * @since 26.1.0
+ * @return Returns a pointer to the {@link OH_UDMF_Summary} instance created if the operation is successful.
+ *     The caller owns the returned instance and must release it by calling {@link OH_UDMF_DestroySummary}
+ *     when it is no longer needed.
+ *     <br>Returns nullptr if the memory is insufficient.
+ *
+ * @release udmf/OH_UDMF_DestroySummary {return}
+ * @see OH_UDMF_Summary
+ * @see OH_UDMF_DestroySummary
+ * @since 26.0.1
  */
 OH_UDMF_Summary* OH_UDMF_CreateSummary(void);
 
 /**
- * @brief Destroys an {@link OH_UDMF_Summary} instance.
+ * @brief Destroy the heap memory pointed to by the pointer of {@link OH_UDMF_Summary}.
+ * Note that this function cannot be called repeatedly for the same pointer.
  *
- * @param summary Represents a pointer to an {@link OH_UDMF_Summary} instance.
- * @see OH_UDMF_Summary OH_UDMF_CreateSummary.
- * @since 26.1.0
+ * @param summary [in] Represents a pointer to an instance of {@link OH_UDMF_Summary}.
+ *     This instance must be a valid instance created by {@link OH_UDMF_CreateSummary}.
+ *     The pointer must not be NULL.
+ * @see OH_UDMF_Summary
+ * @see OH_UDMF_CreateSummary
+ * @since 26.0.1
  */
 void OH_UDMF_DestroySummary(OH_UDMF_Summary* summary);
 
 /**
  * @brief Gets all data types in the overview of an {@link OH_UDMF_Summary} instance.
  *
- * The returned array and strings are owned by {@code summary}. The caller must not modify or free them. They remain
- * valid until {@code summary} is destroyed or repopulated. The order
- * of the returned data types is unspecified. If the overview is empty, {@code *types} is nullptr and
- * {@code *count} is 0.
+ * The returned array and strings are owned by summary. The caller must not modify or free them. They remain
+ * valid until summary is destroyed by {@link OH_UDMF_DestroySummary}. Each returned data type is a non-empty
+ * NUL-terminated UTF-8 string. The order of the returned data types is unspecified. If the overview is empty,
+ * *types is nullptr and *count is 0.
  *
- * @param summary Represents a pointer to an {@link OH_UDMF_Summary} instance.
- * @param types Represents the output array of data types.
- * @param count Represents the number of data types in the output array.
+ * @param summary [in] Represents a pointer to an {@link OH_UDMF_Summary} instance. The pointer must not be NULL.
+ * @param types [out] Represents the output array of data types. Each element is a non-empty
+ *     NUL-terminated UTF-8 string. This parameter becomes invalid after the {@link OH_UDMF_DestroySummary} method
+ *     is called.
+ *     The pointer must not be NULL. If this function returns any value other than {@link UDMF_E_OK},
+ *     *types is unchanged.
+ * @param count [out] Represents the number of data types in the output array. The value is a non-negative integer
+ *     within the range of int64_t and is 0 when the overview is empty. The pointer must not be NULL.
+ *     If this function returns any value other than {@link UDMF_E_OK}, *count is unchanged.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
- *         {@link UDMF_E_OK} success.
- *         {@link UDMF_E_INVALID_PARAM} The input parameter is invalid.
- * @see OH_UDMF_Summary OH_UDMF_GetSummaryOverviewSize Udmf_ErrCode.
- * @since 26.1.0
+ *         <ul>
+ *         <li>{@link UDMF_E_OK} success.</li>
+ *         <li>{@link UDMF_E_INVALID_PARAM} The error code for common invalid args.</li>
+ *         </ul>
+ * @see OH_UDMF_Summary
+ * @see OH_UDMF_GetSummaryOverviewSize
+ * @see Udmf_ErrCode
+ * @since 26.0.1
  */
 int OH_UDMF_GetSummaryOverviewTypes(const OH_UDMF_Summary* summary, const char* const** types,
     int64_t* count);
@@ -361,34 +379,51 @@ int OH_UDMF_GetSummaryOverviewTypes(const OH_UDMF_Summary* summary, const char* 
 /**
  * @brief Gets the data size associated with a data type in the overview of an {@link OH_UDMF_Summary} instance.
  *
- * @param summary Represents a pointer to an {@link OH_UDMF_Summary} instance.
- * @param type Represents the data type used as the overview key.
- * @param dataSize Represents the output data size in bytes. The value is valid only when this function returns
- *     {@link UDMF_E_OK}.
+ * @param summary [in] Represents a pointer to an {@link OH_UDMF_Summary} instance. The pointer must not be NULL.
+ * @param type [in] Represents the data type used as the overview key. It is a NUL-terminated UTF-8 string and
+ *     must not be empty. The pointer must not be NULL.
+ * @param dataSize [out] Represents the output data size in bytes. The value is valid only when this function
+ *     returns {@link UDMF_E_OK}. If the data type is not found, *dataSize is set to -1. If this function returns
+ *     {@link UDMF_E_INVALID_PARAM}, *dataSize is unchanged. The pointer must not be NULL.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
- *         {@link UDMF_E_OK} success.
- *         {@link UDMF_E_INVALID_PARAM} The input parameter is invalid.
- * @see OH_UDMF_Summary OH_UDMF_GetSummaryOverviewTypes Udmf_ErrCode.
- * @since 26.1.0
+ *         <ul>
+ *         <li>{@link UDMF_E_OK} success.</li>
+ *         <li>{@link UDMF_E_INVALID_PARAM} The error code for common invalid args.</li>
+ *         <li>{@link UDMF_ERR} Internal data error.
+ *             The possible cause is that the server is faulty or the memory is insufficient.</li>
+ *         </ul>
+ * @see OH_UDMF_Summary
+ * @see OH_UDMF_GetSummaryOverviewTypes
+ * @see Udmf_ErrCode
+ * @since 26.0.1
  */
 int OH_UDMF_GetSummaryOverviewSize(const OH_UDMF_Summary* summary, const char* type, int64_t* dataSize);
 
 /**
  * @brief Gets all file name extensions in an {@link OH_UDMF_Summary} instance.
  *
- * Each returned extension includes the leading period and uses lowercase ASCII letters. The returned array and
- * strings are owned by {@code summary}. The caller must not modify or free them. They remain valid until
- * {@code summary} is destroyed or repopulated. If no valid file name
- * extension is available, {@code *filenameExtensions} is nullptr and {@code *count} is 0.
+ * Each returned extension includes the leading period and uses lowercase ASCII letters, and is a non-empty
+ * NUL-terminated string. The returned array and strings are owned by summary. The caller must not modify or free
+ * them. They remain valid until summary is destroyed by {@link OH_UDMF_DestroySummary} or until the summary is
+ * populated again successfully.
+ * If no valid file name extension is available, *filenameExtensions is nullptr and *count is 0.
  *
- * @param summary Represents a pointer to an {@link OH_UDMF_Summary} instance.
- * @param filenameExtensions Represents the output array of file name extensions.
- * @param count Represents the number of file name extensions in the output array.
+ * @param summary [in] Represents a pointer to an {@link OH_UDMF_Summary} instance. The pointer must not be NULL.
+ * @param filenameExtensions [out] Represents the output array of file name extensions. Each element is a
+ *     non-empty NUL-terminated ASCII string. This parameter becomes invalid after the {@link OH_UDMF_DestroySummary}
+ *     method is called. The pointer must not be NULL. If this function returns any value other than
+ *     {@link UDMF_E_OK}, *filenameExtensions is unchanged.
+ * @param count [out] Represents the number of file name extensions in the output array. The value is a non-negative
+ *     integer within the range of int64_t and is 0 when no file name extension is available. The pointer must not be
+ *     NULL. If this function returns any value other than {@link UDMF_E_OK}, *count is unchanged.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
- *         {@link UDMF_E_OK} success.
- *         {@link UDMF_E_INVALID_PARAM} The input parameter is invalid.
- * @see OH_UDMF_Summary Udmf_ErrCode.
- * @since 26.1.0
+ *         <ul>
+ *         <li>{@link UDMF_E_OK} success.</li>
+ *         <li>{@link UDMF_E_INVALID_PARAM} The error code for common invalid args.</li>
+ *         </ul>
+ * @see OH_UDMF_Summary
+ * @see Udmf_ErrCode
+ * @since 26.0.1
  */
 int OH_UDMF_GetSummaryFilenameExtensions(const OH_UDMF_Summary* summary,
     const char* const** filenameExtensions, int64_t* count);
