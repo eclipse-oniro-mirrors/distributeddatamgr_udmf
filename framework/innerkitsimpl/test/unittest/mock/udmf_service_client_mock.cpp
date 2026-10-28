@@ -181,4 +181,14 @@ int32_t UdmfServiceClient::GetDataIfAvailable(const std::string &key, const Data
         return MUdmfServiceClient::udmfServiceClient->GetDataIfAvailable(key, dataLoadInfo, iUdmfNotifier, unifiedData);
     }
 }
+
+int32_t UdmfServiceClient::RegisterVirtualEntry(const std::string &key, uint32_t recordIndex,
+    const VirtualEntry &entry,
+    sptr<IRemoteObject> provider)
+{
+    if (MUdmfServiceClient::udmfServiceClient == nullptr) {
+        return -1;
+    }
+    return MUdmfServiceClient::udmfServiceClient->RegisterVirtualEntry(key, recordIndex, entry, provider);
+}
 } // namespace OHOS::UDMF

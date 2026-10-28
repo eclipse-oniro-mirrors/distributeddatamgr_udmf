@@ -24,7 +24,20 @@ ohos_js_unittest("UDMFJsTest") {
   certificate_profile = "${developer_test_path}/signature/openharmony_sx.p7b"
 }
 
+ohos_unittest("VirtualEntryRequestCoordinatorTest") {
+  module_out_path = module_output_path
+
+  sources = [ "virtual_entry_request_coordinator_test.cpp" ]
+
+  include_dirs = [ "${udmf_framework_path}/jskitsimpl/data" ]
+
+  external_deps = [ "googletest:gtest_main" ]
+}
+
 group("unittest") {
   testonly = true
-  deps = [ ":UDMFJsTest" ]
+  deps = [
+    ":UDMFJsTest",
+    ":VirtualEntryRequestCoordinatorTest",
+  ]
 }

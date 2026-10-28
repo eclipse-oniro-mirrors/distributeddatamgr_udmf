@@ -39,6 +39,7 @@
 #include "unified_data_helper.h"
 #include "utd.h"
 #include "utd_client.h"
+#include "virtual_entry_ndk.h"
 #include "video.h"
 
 using namespace OHOS::UDMF;
@@ -61,6 +62,14 @@ static const std::map<Udmf_Intention, Intention> VAILD_INTENTIONS = {
     { UDMF_INTENTION_PICKER, Intention::UD_INTENTION_PICKER },
     { UDMF_INTENTION_MENU, Intention::UD_INTENTION_MENU }
 };
+
+static int ConvertStatusToCError(int32_t status)
+{
+    if (status == E_OK) {
+        return UDMF_E_OK;
+    }
+    return status == E_INVALID_PARAMETERS ? UDMF_E_INVALID_PARAM : UDMF_ERR;
+}
 
 static void DestroyUnifiedRecordArray(OH_UdmfRecord**& records, unsigned int& count)
 {
@@ -538,9 +547,10 @@ int OH_Udmf_SetUnifiedData(Udmf_Intention intention, OH_UdmfData* unifiedData, c
     }
     CustomOption option = {.intention = customOptIntent};
     std::string keyStr;
-    if ((UdmfClient::GetInstance().SetData(option, *(unifiedData->unifiedData_), keyStr)) != E_OK) {
-        LOG_ERROR(UDMF_CAPI, "Set data error");
-        return UDMF_ERR;
+    int32_t status = UdmfClient::GetInstance().SetData(option, *(unifiedData->unifiedData_), keyStr);
+    if (status != E_OK) {
+        LOG_ERROR(UDMF_CAPI, "Set data error, status = %{public}d", status);
+        return ConvertStatusToCError(status);
     }
     if (strcpy_s(key, keyLen, keyStr.c_str()) != EOK) {
         LOG_ERROR(UDMF_CAPI, "String copy failed");
@@ -589,8 +599,8 @@ int OH_Udmf_SetUnifiedDataByOptions(OH_UdmfOptions* options, OH_UdmfData* unifie
     std::string keyStr;
     int32_t ret = UdmfClient::GetInstance().SetData(option, *(unifiedData->unifiedData_), keyStr);
     if (ret != E_OK) {
-        LOG_ERROR(UDMF_CAPI, "Set data error,ret = %{public}d", ret);
-        return UDMF_ERR;
+        LOG_ERROR(UDMF_CAPI, "Set data error, ret = %{public}d", ret);
+        return ConvertStatusToCError(ret);
     }
     if (strcpy_s(key, keyLen, keyStr.c_str()) != E_OK) {
         LOG_ERROR(UDMF_CAPI, "String copy failed");
@@ -805,6 +815,24 @@ void AddUds(OH_UdmfRecord* record, UdsObject* udsObject, UDType type)
     }
 }
 
+static std::shared_ptr<File> CreateVirtualFileRecord(UDType type, const ValueType &value)
+{
+    switch (type) {
+        case UDType::FILE:
+            return std::make_shared<File>(type, value);
+        case UDType::IMAGE:
+            return std::make_shared<Image>(type, value);
+        case UDType::VIDEO:
+            return std::make_shared<Video>(type, value);
+        case UDType::AUDIO:
+            return std::make_shared<Audio>(type, value);
+        case UDType::FOLDER:
+            return std::make_shared<Folder>(type, value);
+        default:
+            return nullptr;
+    }
+}
+
 int OH_UdmfRecord_AddPlainText(OH_UdmfRecord* record, OH_UdsPlainText* plainText)
 {
     if (!IsUnifiedRecordValid(record) || IsInvalidUdsObjectPtr(plainText, UDS_PLAIN_TEXT_STRUCT_ID)) {
@@ -846,9 +874,18 @@ int OH_UdmfRecord_AddFileUri(OH_UdmfRecord* record, OH_UdsFileUri* fileUri)
     if (!IsUnifiedRecordValid(record) || IsInvalidUdsObjectPtr(fileUri, UDS_FILE_URI_STRUCT_ID)) {
         return UDMF_E_INVALID_PARAM;
     }
-    std::string* fileType = std::get_if<std::string>(&(fileUri->obj->value_[FILE_TYPE]));
-    if (fileType == nullptr) {
-        return UDMF_ERR;
+    std::string fileType;
+    std::shared_ptr<Object> object;
+    std::shared_ptr<NdkVirtualEntryInfo> virtualEntry;
+    {
+        std::lock_guard<std::mutex> lock(fileUri->mutex);
+        auto value = fileUri->obj->value_.find(FILE_TYPE);
+        if (value == fileUri->obj->value_.end() || !std::holds_alternative<std::string>(value->second)) {
+            return UDMF_ERR;
+        }
+        fileType = std::get<std::string>(value->second);
+        object = fileUri->obj;
+        virtualEntry = fileUri->virtualEntry_;
     }
     std::map<UDType, std::function<void(OH_UdmfRecord*, OH_UdsFileUri*)>> addFileUriFuncs = {
         {UDType::FILE, [](OH_UdmfRecord* record, OH_UdsFileUri* fileUri)
@@ -863,11 +900,29 @@ int OH_UdmfRecord_AddFileUri(OH_UdmfRecord* record, OH_UdsFileUri* fileUri)
             {  AddUds<Folder>(record, fileUri, UDType::FOLDER); }},
     };
     int32_t utdId = UDType::FILE;
-    std::string subFileType = UnifiedDataUtils::GetBelongsToFileType(*fileType);
+    std::string subFileType = UnifiedDataUtils::GetBelongsToFileType(fileType);
     if (!subFileType.empty()) {
         utdId = static_cast<UDType>(UtdUtils::GetUtdEnumFromUtdId(subFileType));
     }
-    addFileUriFuncs[static_cast<UDType>(utdId)](record, fileUri);
+    UDType type = static_cast<UDType>(utdId);
+    if (virtualEntry != nullptr) {
+        if (record->record_->GetType() != UD_BUTT) {
+            LOG_ERROR(UDMF_CAPI, "Virtual file URI must be the primary entry of a record");
+            return UDMF_E_INVALID_PARAM;
+        }
+        auto file = CreateVirtualFileRecord(type, object);
+        if (file == nullptr || !AttachNdkVirtualEntry(file, virtualEntry)) {
+            LOG_ERROR(UDMF_CAPI, "Attach virtual file entry failed");
+            return UDMF_ERR;
+        }
+        record->record_ = std::move(file);
+        return UDMF_E_OK;
+    }
+    auto function = addFileUriFuncs.find(type);
+    if (function == addFileUriFuncs.end()) {
+        return UDMF_E_INVALID_PARAM;
+    }
+    function->second(record, fileUri);
     return UDMF_E_OK;
 }
 

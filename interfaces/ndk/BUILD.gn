@@ -37,6 +37,7 @@ ohos_shared_library("libudmf") {
     "${udmf_framework_path}/ndkimpl/data/udmf.cpp",
     "${udmf_framework_path}/ndkimpl/data/uds.cpp",
     "${udmf_framework_path}/ndkimpl/data/utd.cpp",
+    "${udmf_framework_path}/ndkimpl/data/virtual_entry_ndk.cpp",
   ]
 
   defines = [ "API_EXPORT=__attribute__((visibility (\"default\")))" ]
@@ -44,6 +45,7 @@ ohos_shared_library("libudmf") {
   deps = [
     "${udmf_interfaces_path}/innerkits:udmf_client",
     "${udmf_interfaces_path}/innerkits:utd_client",
+    "${udmf_interfaces_path}/innerkits:virtual_entry_provider_proxy",
   ]
 
   external_deps = [

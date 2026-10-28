@@ -121,6 +121,7 @@ udmf_test_impl_sources = [
   "${udmf_framework_path}/ndkimpl/data/udmf.cpp",
   "${udmf_framework_path}/ndkimpl/data/uds.cpp",
   "${udmf_framework_path}/ndkimpl/data/utd.cpp",
+  "${udmf_framework_path}/ndkimpl/data/virtual_entry_ndk.cpp",
 ]
 
 udmf_test_impl_deps = [ "${udmf_interfaces_path}/innerkits:utd_client" ]

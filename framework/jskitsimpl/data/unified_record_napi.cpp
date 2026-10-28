@@ -27,10 +27,43 @@
 #include "system_defined_form.h"
 #include "system_defined_pixelmap.h"
 #include "application_defined_record.h"
+#include "file_napi.h"
 #include "utd_client.h"
 
 namespace OHOS {
 namespace UDMF {
+namespace {
+constexpr const char *VIRTUAL_ENTRY = "virtualEntry";
+
+napi_status CopySerializableFileUri(napi_env env, napi_value source, napi_value &target)
+{
+    napi_value propertyNames = nullptr;
+    uint32_t propertyCount = 0;
+    if (napi_create_object(env, &target) != napi_ok ||
+        napi_get_property_names(env, source, &propertyNames) != napi_ok ||
+        napi_get_array_length(env, propertyNames, &propertyCount) != napi_ok) {
+        return napi_invalid_arg;
+    }
+    for (uint32_t index = 0; index < propertyCount; ++index) {
+        napi_value propertyName = nullptr;
+        napi_value propertyValue = nullptr;
+        std::string name;
+        if (napi_get_element(env, propertyNames, index, &propertyName) != napi_ok ||
+            NapiDataUtils::GetValue(env, propertyName, name) != napi_ok) {
+            return napi_invalid_arg;
+        }
+        if (name == VIRTUAL_ENTRY) {
+            continue;
+        }
+        if (napi_get_property(env, source, propertyName, &propertyValue) != napi_ok ||
+            napi_set_property(env, target, propertyName, propertyValue) != napi_ok) {
+            return napi_invalid_arg;
+        }
+    }
+    return napi_ok;
+}
+} // namespace
+
 napi_value UnifiedRecordNapi::Constructor(napi_env env)
 {
     LOG_DEBUG(UDMF_KITS_NAPI, "UnifiedRecordNapi");
@@ -73,6 +106,11 @@ napi_value UnifiedRecordNapi::New(napi_env env, napi_callback_info info)
     } else {
         udRecord->value_ = std::make_shared<UnifiedRecord>();
     }
+    if (udRecord->value_ == nullptr) {
+        delete udRecord;
+        ASSERT_ERR(ctxt->env, false, Status::E_INVALID_PARAMETERS,
+            "Parameter error: virtualEntry is invalid");
+    }
     ASSERT_CALL(env, napi_wrap(env, ctxt->self, udRecord, Destructor, nullptr, nullptr), udRecord);
     return ctxt->self;
 }
@@ -110,7 +148,8 @@ std::shared_ptr<UnifiedRecord> UnifiedRecordNapi::GenerateNativeRecord(napi_env 
         {APPLICATION_DEFINED_RECORD,
             [](UDType type, ValueType value) { return std::make_shared<ApplicationDefinedRecord>(type, value); }},
     };
-    if (utdType == FILE_URI && std::holds_alternative<std::shared_ptr<Object>>(value)) {
+    bool isFileUri = utdType == FILE_URI;
+    if (isFileUri && std::holds_alternative<std::shared_ptr<Object>>(value)) {
         ObjectUtils::ProcessFileUriType(utdType, value);
     }
     auto constructor = constructors.find(utdType);
@@ -118,6 +157,10 @@ std::shared_ptr<UnifiedRecord> UnifiedRecordNapi::GenerateNativeRecord(napi_env 
         return std::make_shared<UnifiedRecord>(utdType, value);
     }
     auto uRecord = constructor->second(utdType, value);
+    if (isFileUri && utdType == FILE &&
+        !FileNapi::AttachVirtualEntry(env, valueNapi, std::static_pointer_cast<File>(uRecord))) {
+        return nullptr;
+    }
     if (utdType == APPLICATION_DEFINED_RECORD) {
         std::shared_ptr<ApplicationDefinedRecord> applicationDefinedRecord =
             std::static_pointer_cast<ApplicationDefinedRecord>(uRecord);
@@ -156,7 +199,12 @@ void UnifiedRecordNapi::GetNativeValue(napi_env env, std::string type, napi_valu
     } else if (valueType == napi_null) {
         value = nullptr;
     }
-    std::visit([&](auto &value) { status = NapiDataUtils::GetValue(env, valueNapi, value); }, value);
+    napi_value serializableValue = valueNapi;
+    if (type == GENERAL_FILE_URI && std::holds_alternative<std::shared_ptr<Object>>(value)) {
+        status = CopySerializableFileUri(env, valueNapi, serializableValue);
+        ASSERT_ERR_VOID(env, status == napi_ok, Status::E_ERROR, "copy file uri failed");
+    }
+    std::visit([&](auto &value) { status = NapiDataUtils::GetValue(env, serializableValue, value); }, value);
     ASSERT_ERR_VOID(env, status == napi_ok, Status::E_ERROR, "get unifiedRecord failed");
 }
 
@@ -281,6 +329,8 @@ napi_value UnifiedRecordNapi::AddEntry(napi_env env, napi_callback_info info)
     ASSERT_ERR(ctxt->env, (uRecord != nullptr && uRecord->value_ != nullptr), Status::E_ERROR, "invalid object!");
     if (uRecord->value_->GetType() == UD_BUTT) {
         uRecord->value_ = GenerateNativeRecord(env, type, napiValue);
+        ASSERT_ERR(ctxt->env, uRecord->value_ != nullptr, Status::E_INVALID_PARAMETERS,
+            "Parameter error: virtualEntry is invalid");
     } else {
         ValueType value;
         GetNativeValue(env, type, napiValue, value);

@@ -63,6 +63,7 @@ taihe_shared_library("udmf_taihe_native") {
   subsystem_name = "$subsystem_name"
   include_dirs = [
     "include",
+    "${udmf_framework_path}/jskitsimpl/data",
     "${udmf_interfaces_path}/innerkits/common",
     "${udmf_interfaces_path}/innerkits/data",
     "${udmf_interfaces_path}/jskits/intelligence",
@@ -97,11 +98,13 @@ taihe_shared_library("udmf_taihe_native") {
     "src/unified_data_taihe.cpp",
     "src/unified_record_taihe.cpp",
     "src/video_taihe.cpp",
+    "src/virtual_entry_taihe.cpp",
   ]
   deps = [
     ":run_udmf_taihe",
     "${udmf_interfaces_path}/innerkits:udmf_client",
     "${udmf_interfaces_path}/innerkits:utd_client",
+    "${udmf_interfaces_path}/innerkits:virtual_entry_provider_proxy",
     "${udmf_interfaces_path}/innerkits/aipcore:aip_core_mgr_static",
     "${udmf_interfaces_path}/jskits:intelligence_napi",
     "${udmf_interfaces_path}/jskits:udmf_js_common",

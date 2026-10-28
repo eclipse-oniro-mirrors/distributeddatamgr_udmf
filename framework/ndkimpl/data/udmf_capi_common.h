@@ -20,11 +20,16 @@
 #include "unified_data.h"
 #include "udmf.h"
 #include "uri_permission_util.h"
+#include <memory>
 #include <mutex>
 #include <vector>
 #include <cstdint>
 
 # define MAX_GENERAL_ENTRY_SIZE (100 * 1024 * 1024)
+
+namespace OHOS::UDMF {
+struct NdkVirtualEntryInfo;
+}
 
 struct UdsObject {
     const int64_t cid;
@@ -50,7 +55,9 @@ enum NdkStructId : std::int64_t {
     UDS_FILE_URI_STRUCT_ID,
     UDS_PIXEL_MAP_STRUCT_ID,
     UDS_ARRAY_BUFFER_STRUCT_ID,
-    UDS_CONTENT_FORM_STRUCT_ID
+    UDS_CONTENT_FORM_STRUCT_ID,
+    UDMF_VIRTUAL_ITEM_STRUCT_ID,
+    UDMF_VIRTUAL_FILE_INFO_STRUCT_ID
 };
 
 struct OH_Utd {
@@ -82,6 +89,7 @@ struct OH_UdsAppItem : public UdsObject {
 };
 struct OH_UdsFileUri : public UdsObject {
     OH_UdsFileUri();
+    std::shared_ptr<OHOS::UDMF::NdkVirtualEntryInfo> virtualEntry_;
 };
 struct OH_UdsPixelMap : public UdsObject {
     OH_UdsPixelMap();

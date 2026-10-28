@@ -365,5 +365,15 @@ int32_t UdmfServiceClient::GetDataIfAvailable(const std::string &key, const Data
 {
     return udmfProxy_->GetDataIfAvailable(key, dataLoadInfo, iUdmfNotifier, unifiedData);
 }
+
+int32_t UdmfServiceClient::RegisterVirtualEntry(const std::string &key, uint32_t recordIndex,
+    const VirtualEntry &entry,
+    sptr<IRemoteObject> provider)
+{
+    if (key.empty() || provider == nullptr) {
+        return E_INVALID_PARAMETERS;
+    }
+    return udmfProxy_->RegisterVirtualEntry(key, recordIndex, entry, provider);
+}
 } // namespace UDMF
 } // namespace OHOS

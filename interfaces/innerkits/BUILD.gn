@@ -50,6 +50,13 @@ config("udmf_core_config") {
   ]
 }
 
+config("virtual_entry_provider_proxy_config") {
+  include_dirs = [
+    "${udmf_interfaces_path}/innerkits/data",
+    "${udmf_framework_path}/innerkitsimpl/service",
+  ]
+}
+
 udmf_core_sources = [
   "${udmf_framework_path}/common/endian_converter.cpp",
   "${udmf_framework_path}/common/tlv_object.cpp",
@@ -106,6 +113,36 @@ ohos_static_library("udmf_core") {
   cflags = [ "-Werror=vla" ]
 }
 
+ohos_static_library("virtual_entry_provider_proxy") {
+  branch_protector_ret = "pac_ret"
+  branch_protector_frt = "bti"
+  sanitize = {
+    ubsan = true
+    boundary_sanitize = true
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
+  sources = [
+    "${udmf_framework_path}/innerkitsimpl/service/virtual_entry_provider_proxy.cpp",
+    "${udmf_framework_path}/innerkitsimpl/service/virtual_entry_read_callback.cpp",
+  ]
+
+  public_configs = [ ":virtual_entry_provider_proxy_config" ]
+
+  external_deps = [
+    "c_utils:utils",
+    "ipc:ipc_core",
+  ]
+
+  subsystem_name = "distributeddatamgr"
+  part_name = "udmf"
+  use_exceptions = false
+  cflags_cc = [ "-Oz" ]
+  cflags = [ "-Werror=vla" ]
+}
+
 ohos_shared_library("udmf_client") {
   branch_protector_ret = "pac_ret"
   branch_protector_frt = "bti"
@@ -143,6 +180,8 @@ ohos_shared_library("udmf_client") {
     "${udmf_framework_path}/innerkitsimpl/service/udmf_notifier_stub.cpp",
     "${udmf_framework_path}/innerkitsimpl/service/udmf_service_client.cpp",
     "${udmf_framework_path}/innerkitsimpl/service/udmf_service_proxy.cpp",
+    "${udmf_framework_path}/innerkitsimpl/service/virtual_entry_provider_proxy.cpp",
+    "${udmf_framework_path}/innerkitsimpl/service/virtual_entry_read_callback.cpp",
   ]
   public_configs = [ ":udmf_client_config" ]
 

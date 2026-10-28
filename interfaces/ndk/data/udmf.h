@@ -1117,9 +1117,10 @@ int OH_Udmf_GetUnifiedDataByOptions(OH_UdmfOptions* options, OH_UdmfData** dataA
  * @param keyLen Represents size of key param.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
  *         {@link UDMF_E_OK} success.
- *         {@link UDMF_E_INVALID_PARAM} The error code for common invalid args.
+ *         {@link UDMF_E_INVALID_PARAM} An argument, virtual entry, or virtual entry usage scenario is invalid.
  *         {@link UDMF_ERR} Internal data error.
- *             The possible cause is that the server is faulty or the memory is insufficient.
+ *             Possible causes include a server fault, insufficient memory, data storage failure, or virtual entry
+ *             registration failure.
  * @see OH_UdmfProperty Udmf_Intention Udmf_ErrCode.
  * @since 12
  */
@@ -1136,9 +1137,10 @@ int OH_Udmf_SetUnifiedData(Udmf_Intention intention, OH_UdmfData* unifiedData,
  * @param keyLen Represents size of key param.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
  *         {@link UDMF_E_OK} success.
- *         {@link UDMF_E_INVALID_PARAM} The error code for common invalid args.
+ *         {@link UDMF_E_INVALID_PARAM} An argument, virtual entry, or virtual entry usage scenario is invalid.
  *         {@link UDMF_ERR} Internal data error.
- *             The possible cause is that the server is faulty or the memory is insufficient.
+ *             Possible causes include a server fault, insufficient memory, data storage failure, or virtual entry
+ *             registration failure.
  * @see OH_UdmfOptions OH_UdmfData Udmf_ErrCode.
  * @since 20
  */

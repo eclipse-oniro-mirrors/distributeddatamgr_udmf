@@ -47,6 +47,8 @@ udmf_data_napi_sources = [
   "${udmf_framework_path}/jskitsimpl/data/unified_data_napi.cpp",
   "${udmf_framework_path}/jskitsimpl/data/unified_data_properties_napi.cpp",
   "${udmf_framework_path}/jskitsimpl/data/unified_record_napi.cpp",
+  "${udmf_framework_path}/jskitsimpl/data/virtual_entry_napi.cpp",
+  "${udmf_framework_path}/jskitsimpl/data/virtual_entry_provider_napi.cpp",
   "${udmf_framework_path}/jskitsimpl/data/video_napi.cpp",
   "${udmf_interfaces_path}/jskits/module/unified_data_channel_napi_module.cpp",
 ]
@@ -69,6 +71,7 @@ ohos_shared_library("udmf_data_napi") {
   deps = [
     "../innerkits:udmf_client",
     "../innerkits:utd_client",
+    "../innerkits:virtual_entry_provider_proxy",
     "../jskits:udmf_js_common",
   ]
 
@@ -76,6 +79,7 @@ ohos_shared_library("udmf_data_napi") {
     "ability_base:want",
     "ability_runtime:abilitykit_native",
     "ability_runtime:napi_common",
+    "access_token:libaccesstoken_sdk",
     "c_utils:utils",
     "hilog:libhilog",
     "image_framework:image",

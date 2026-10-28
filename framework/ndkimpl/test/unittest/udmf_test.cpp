@@ -47,6 +47,30 @@ using namespace OHOS::UDMF;
 namespace OHOS::Test {
 static constexpr uint64_t MAX_TYPES_COUNT = 10 * 1024;
 static constexpr const char *TEST_DATA = "/data/utd/destUri";
+
+static int ReadVirtualEntry(
+    void *context, const char *id, int64_t offset, uint32_t length, uint8_t *data, uint32_t *bytesRead)
+{
+    (void)context;
+    (void)id;
+    (void)offset;
+    (void)length;
+    (void)data;
+    if (bytesRead == nullptr) {
+        return UDMF_E_INVALID_PARAM;
+    }
+    *bytesRead = 0;
+    return UDMF_E_OK;
+}
+
+static int CancelVirtualEntry(void *context, const char *const *idList, uint32_t count)
+{
+    (void)context;
+    (void)idList;
+    (void)count;
+    return UDMF_E_OK;
+}
+
 class UDMFTest : public testing::Test {
 public:
     static void SetUpTestCase(void);
@@ -4898,4 +4922,37 @@ HWTEST_F(UDMFTest, OH_UDMF_Summary_Repopulate_001, TestSize.Level1)
  
     OH_UDMF_DestroySummary(summary);
 }
+
+/**
+ * @tc.name: OH_UdmfRecord_AddVirtualFileUri_001
+ * @tc.desc: Attach a virtual file provider to the primary file record
+ * @tc.type: FUNC
+ */
+HWTEST_F(UDMFTest, OH_UdmfRecord_AddVirtualFileUri_001, TestSize.Level1)
+{
+    auto item = OH_UdmfVirtualItem_CreateFile("example.bin", "file-id", 100);
+    ASSERT_NE(item, nullptr);
+    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(item, 1024), UDMF_E_OK);
+    OH_UdmfVirtualFileCallbacks callbacks{};
+    callbacks.structSize = sizeof(OH_UdmfVirtualFileCallbacks);
+    callbacks.onRead = ReadVirtualEntry;
+    callbacks.onCancel = CancelVirtualEntry;
+    auto info = OH_UdmfVirtualFileInfo_Create(item, &callbacks, nullptr, nullptr);
+    auto fileUri = OH_UdsFileUri_Create();
+    auto record = OH_UdmfRecord_Create();
+    ASSERT_NE(info, nullptr);
+    ASSERT_NE(fileUri, nullptr);
+    ASSERT_NE(record, nullptr);
+    ASSERT_EQ(OH_UdsFileUri_SetVirtualEntry(fileUri, info), UDMF_E_OK);
+
+    EXPECT_EQ(OH_UdmfRecord_AddFileUri(record, fileUri), UDMF_E_OK);
+    ASSERT_NE(record->record_, nullptr);
+    EXPECT_EQ(record->record_->GetType(), UDType::FILE);
+    EXPECT_EQ(OH_UdmfRecord_AddFileUri(record, fileUri), UDMF_E_INVALID_PARAM);
+
+    OH_UdmfRecord_Destroy(record);
+    OH_UdsFileUri_Destroy(fileUri);
+    OH_UdmfVirtualFileInfo_Destroy(info);
+    OH_UdmfVirtualItem_Destroy(item);
 }
+} // namespace OHOS::Test

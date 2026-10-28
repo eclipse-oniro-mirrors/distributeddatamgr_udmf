@@ -32,6 +32,7 @@
 #include "taihe/runtime.hpp"
 #include "unified_record_taihe.h"
 #include "video.h"
+#include "virtual_entry_taihe.h"
 
 namespace OHOS {
 namespace UDMF {
@@ -43,6 +44,13 @@ UnifiedRecordTaihe::UnifiedRecordTaihe()
 std::shared_ptr<UnifiedRecord> UnifiedRecordTaihe::GenerateNativeRecord(const ::taihe::string_view &type,
     ::taiheChannel::ValueType const& value)
 {
+    uintptr_t virtualEntry = 0;
+    if (value.get_tag() == ::taiheChannel::ValueType::tag_t::fileUri) {
+        const auto &fileUri = value.get_fileUri_ref();
+        if (fileUri.virtualEntry.has_value()) {
+            virtualEntry = fileUri.virtualEntry.value();
+        }
+    }
     ValueType valueType = ConvertValueType(::taihe::get_env(), type, value);
     UDType utdType = APPLICATION_DEFINED_RECORD;
     if (UtdUtils::IsValidUtdId(std::string(type))) {
@@ -79,6 +87,11 @@ std::shared_ptr<UnifiedRecord> UnifiedRecordTaihe::GenerateNativeRecord(const ::
         return this->value_;
     }
     auto uRecord = constructor->second(utdType, valueType);
+    if (utdType == FILE && virtualEntry != 0 &&
+        !VirtualEntryTaihe::Attach(::taihe::get_env(), virtualEntry, std::static_pointer_cast<File>(uRecord))) {
+        taihe::set_business_error(PARAMETERSERROR, "Parameter error: virtualEntry is invalid");
+        return nullptr;
+    }
     if (utdType == APPLICATION_DEFINED_RECORD) {
         std::shared_ptr<ApplicationDefinedRecord> applicationDefinedRecord =
             std::static_pointer_cast<ApplicationDefinedRecord>(uRecord);
