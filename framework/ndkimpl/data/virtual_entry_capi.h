@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef UDMF_VIRTUAL_ENTRY_NDK_H
-#define UDMF_VIRTUAL_ENTRY_NDK_H
+#ifndef UDMF_VIRTUAL_ENTRY_CAPI_H
+#define UDMF_VIRTUAL_ENTRY_CAPI_H
 
 #include <memory>
 #include <mutex>
@@ -52,7 +52,7 @@ bool AttachNdkVirtualEntry(const std::shared_ptr<File> &file, const std::shared_
 struct OH_UdmfVirtualItem {
     const int64_t cid = NdkStructId::UDMF_VIRTUAL_ITEM_STRUCT_ID;
     OHOS::UDMF::VirtualEntry entry_;
-    mutable std::mutex mutex_;
+    mutable std::mutex mutex;
 };
 
 struct OH_UdmfVirtualFileInfo {
@@ -60,4 +60,4 @@ struct OH_UdmfVirtualFileInfo {
     std::shared_ptr<OHOS::UDMF::NdkVirtualEntryInfo> info_;
 };
 
-#endif // UDMF_VIRTUAL_ENTRY_NDK_H
+#endif // UDMF_VIRTUAL_ENTRY_CAPI_H

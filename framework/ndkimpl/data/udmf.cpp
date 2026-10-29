@@ -39,7 +39,7 @@
 #include "unified_data_helper.h"
 #include "utd.h"
 #include "utd_client.h"
-#include "virtual_entry_ndk.h"
+#include "virtual_entry_capi.h"
 #include "video.h"
 
 using namespace OHOS::UDMF;
@@ -869,6 +869,22 @@ int OH_UdmfRecord_AddAppItem(OH_UdmfRecord* record, OH_UdsAppItem* appItem)
     return UDMF_E_OK;
 }
 
+static int AddVirtualFileUri(OH_UdmfRecord* record, UDType type, const std::shared_ptr<Object>& object,
+    const std::shared_ptr<NdkVirtualEntryInfo>& virtualEntry)
+{
+    if (record->record_->GetType() != UD_BUTT) {
+        LOG_ERROR(UDMF_CAPI, "Virtual file URI must be the primary entry of a record");
+        return UDMF_E_INVALID_PARAM;
+    }
+    auto file = CreateVirtualFileRecord(type, object);
+    if (file == nullptr || !AttachNdkVirtualEntry(file, virtualEntry)) {
+        LOG_ERROR(UDMF_CAPI, "Attach virtual file entry failed");
+        return UDMF_ERR;
+    }
+    record->record_ = std::move(file);
+    return UDMF_E_OK;
+}
+
 int OH_UdmfRecord_AddFileUri(OH_UdmfRecord* record, OH_UdsFileUri* fileUri)
 {
     if (!IsUnifiedRecordValid(record) || IsInvalidUdsObjectPtr(fileUri, UDS_FILE_URI_STRUCT_ID)) {
@@ -906,17 +922,7 @@ int OH_UdmfRecord_AddFileUri(OH_UdmfRecord* record, OH_UdsFileUri* fileUri)
     }
     UDType type = static_cast<UDType>(utdId);
     if (virtualEntry != nullptr) {
-        if (record->record_->GetType() != UD_BUTT) {
-            LOG_ERROR(UDMF_CAPI, "Virtual file URI must be the primary entry of a record");
-            return UDMF_E_INVALID_PARAM;
-        }
-        auto file = CreateVirtualFileRecord(type, object);
-        if (file == nullptr || !AttachNdkVirtualEntry(file, virtualEntry)) {
-            LOG_ERROR(UDMF_CAPI, "Attach virtual file entry failed");
-            return UDMF_ERR;
-        }
-        record->record_ = std::move(file);
-        return UDMF_E_OK;
+        return AddVirtualFileUri(record, type, object, virtualEntry);
     }
     auto function = addFileUriFuncs.find(type);
     if (function == addFileUriFuncs.end()) {

@@ -195,7 +195,7 @@ typedef int (*OH_UdmfVirtualFile_OnRead)(void* context, const char* id, int64_t 
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-typedef int (*OH_UdmfVirtualFile_OnCancel)(void* context, const char* const* idList, uint32_t count);
+typedef int (*OH_UdmfVirtualFile_OnCancel)(void* context, const char* const *idList, uint32_t count);
 
 /**
  * @brief Releases a user context retained by UDMF.

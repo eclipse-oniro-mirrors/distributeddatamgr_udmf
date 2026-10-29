@@ -56,6 +56,12 @@ private:
     static bool AttachPromiseHandlers(
         napi_env env, napi_value promise, const std::shared_ptr<Request> &request);
     static void CallJs(napi_env env, napi_value callback, void *context, void *data);
+    static void InvokeCallback(napi_env env, napi_value provider, napi_value function,
+        const std::shared_ptr<Request> &request);
+    int32_t HandleStatRequest(MessageParcel &request, MessageParcel &reply);
+    int32_t HandleReadRequest(MessageParcel &request, MessageParcel &reply);
+    int32_t HandleAsyncReadRequest(MessageParcel &request);
+    int32_t HandleCancelRequest(MessageParcel &request, MessageParcel &reply);
     static napi_value PromiseResolved(napi_env env, napi_callback_info info);
     static napi_value PromiseRejected(napi_env env, napi_callback_info info);
     static void PromiseTokenFinalizer(napi_env env, void *data, void *hint);

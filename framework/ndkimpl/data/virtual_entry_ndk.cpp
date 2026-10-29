@@ -15,7 +15,7 @@
 
 #define LOG_TAG "VirtualEntryNdk"
 
-#include "virtual_entry_ndk.h"
+#include "virtual_entry_capi.h"
 
 #include <atomic>
 #include <cerrno>
@@ -110,10 +110,12 @@ bool TryAcquireReadSlot()
 {
     uint32_t current = g_activeReads.load(std::memory_order_relaxed);
     while (current < MAX_CONCURRENT_READS) {
+        uint32_t expected = current;
         if (g_activeReads.compare_exchange_weak(
-                current, current + 1, std::memory_order_acquire, std::memory_order_relaxed)) {
+            expected, current + 1, std::memory_order_acquire, std::memory_order_relaxed)) {
             return true;
         }
+        current = expected;
     }
     return false;
 }
@@ -374,7 +376,7 @@ int OH_UdmfVirtualItem_SetFileSize(OH_UdmfVirtualItem *item, int64_t size)
     if (!IsValidVirtualItem(item) || size < 0) {
         return UDMF_E_INVALID_PARAM;
     }
-    std::lock_guard<std::mutex> lock(item->mutex_);
+    std::lock_guard<std::mutex> lock(item->mutex);
     if (item->entry_.type != OHOS::UDMF::VirtualEntryType::FILE) {
         return UDMF_E_INVALID_PARAM;
     }
@@ -387,7 +389,7 @@ int OH_UdmfVirtualItem_ClearFileSize(OH_UdmfVirtualItem *item)
     if (!IsValidVirtualItem(item)) {
         return UDMF_E_INVALID_PARAM;
     }
-    std::lock_guard<std::mutex> lock(item->mutex_);
+    std::lock_guard<std::mutex> lock(item->mutex);
     if (item->entry_.type != OHOS::UDMF::VirtualEntryType::FILE) {
         return UDMF_E_INVALID_PARAM;
     }
@@ -400,7 +402,7 @@ int OH_UdmfVirtualItem_AddChild(OH_UdmfVirtualItem *directory, const OH_UdmfVirt
     if (!IsValidVirtualItem(directory) || !IsValidVirtualItem(child) || directory == child) {
         return UDMF_E_INVALID_PARAM;
     }
-    std::scoped_lock lock(directory->mutex_, child->mutex_);
+    std::scoped_lock lock(directory->mutex, child->mutex);
     if (directory->entry_.type != OHOS::UDMF::VirtualEntryType::DIRECTORY) {
         return UDMF_E_INVALID_PARAM;
     }
@@ -421,7 +423,7 @@ OH_UdmfVirtualFileInfo *OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem *
         callbacks->onCancel == nullptr || (context != nullptr && finalize == nullptr)) {
         return nullptr;
     }
-    std::lock_guard<std::mutex> lock(itemInfo->mutex_);
+    std::lock_guard<std::mutex> lock(itemInfo->mutex);
     if (!OHOS::UDMF::IsValidVirtualEntry(itemInfo->entry_) ||
         (OHOS::UDMF::NeedsStatCallback(itemInfo->entry_) && callbacks->onStat == nullptr)) {
         return nullptr;

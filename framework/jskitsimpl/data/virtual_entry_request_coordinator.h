@@ -27,13 +27,13 @@ class VirtualEntryRequestCoordinator final {
 public:
     // Limit all provider instances in one application process so pending Binder
     // calls cannot occupy the complete application Binder thread pool.
-    static constexpr size_t DEFAULT_MAX_CONCURRENT_READS = 8;
+    static constexpr size_t defaultMaxConcurrentReads = 8;
     // Each provider read loads at most one 5 MiB block. Concurrent requests are
     // bounded so large virtual files cannot occupy the complete Binder thread pool.
-    static constexpr std::chrono::milliseconds DEFAULT_TIMEOUT = std::chrono::seconds(30);
+    static constexpr std::chrono::milliseconds defaultTimeout = std::chrono::seconds(30);
 
-    explicit VirtualEntryRequestCoordinator(size_t maxConcurrentReads = DEFAULT_MAX_CONCURRENT_READS,
-        std::chrono::milliseconds timeout = DEFAULT_TIMEOUT)
+    explicit VirtualEntryRequestCoordinator(size_t maxConcurrentReads = defaultMaxConcurrentReads,
+        std::chrono::milliseconds timeout = defaultTimeout)
         : maxConcurrentReads_(maxConcurrentReads), timeout_(timeout)
     {
     }
@@ -42,10 +42,12 @@ public:
     {
         size_t current = activeReads_.load(std::memory_order_relaxed);
         while (current < maxConcurrentReads_) {
+            size_t expected = current;
             if (activeReads_.compare_exchange_weak(
-                current, current + 1, std::memory_order_acquire, std::memory_order_relaxed)) {
+                expected, current + 1, std::memory_order_acquire, std::memory_order_relaxed)) {
                 return true;
             }
+            current = expected;
         }
         return false;
     }
@@ -53,8 +55,13 @@ public:
     void Release()
     {
         size_t current = activeReads_.load(std::memory_order_relaxed);
-        while (current != 0 && !activeReads_.compare_exchange_weak(
-            current, current - 1, std::memory_order_release, std::memory_order_relaxed)) {
+        while (current != 0) {
+            size_t expected = current;
+            if (activeReads_.compare_exchange_weak(
+                expected, current - 1, std::memory_order_release, std::memory_order_relaxed)) {
+                return;
+            }
+            current = expected;
         }
     }
 

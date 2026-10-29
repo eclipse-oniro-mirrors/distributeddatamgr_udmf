@@ -147,7 +147,8 @@ bool ParseVirtualDirectory(ani_env *env, ani_object object, VirtualEntry &entry,
 
 bool ParseVirtualItem(ani_env *env, ani_object object, VirtualEntry &entry, uint32_t depth, uint32_t &itemCount)
 {
-    if (env == nullptr || object == nullptr || depth > MAX_VIRTUAL_ENTRY_DEPTH || itemCount >= MAX_VIRTUAL_ENTRY_COUNT) {
+    if (env == nullptr || object == nullptr || depth > MAX_VIRTUAL_ENTRY_DEPTH ||
+        itemCount >= MAX_VIRTUAL_ENTRY_COUNT) {
         return false;
     }
     ++itemCount;
@@ -295,6 +296,15 @@ private:
         int32_t status{ -EIO };
     };
 
+    struct RequestContext {
+        std::shared_ptr<Request> request;
+    };
+
+    int32_t HandleStatRequest(MessageParcel &request, MessageParcel &reply);
+    int32_t HandleReadRequest(MessageParcel &request, MessageParcel &reply);
+    int32_t HandleAsyncReadRequest(MessageParcel &request);
+    int32_t HandleCancelRequest(MessageParcel &request, MessageParcel &reply);
+
     VirtualEntryProviderTaihe(
         ani_vm *vm, ani_ref providerRef, arkts::concurrency_helpers::AniWorkerId workerId)
         : vm_(vm), providerRef_(providerRef), workerId_(workerId)
@@ -326,7 +336,7 @@ private:
         }
         request->vm = vm_;
         request->providerRef = requestProviderRef;
-        auto *holder = new (std::nothrow) std::shared_ptr<Request>(request);
+        auto *holder = new (std::nothrow) RequestContext{ request };
         if (holder == nullptr) {
             env->GlobalReference_Delete(requestProviderRef);
             request->providerRef = nullptr;
@@ -358,8 +368,8 @@ private:
 
     static void ExecuteCallback(void *data)
     {
-        std::unique_ptr<std::shared_ptr<Request>> holder(static_cast<std::shared_ptr<Request> *>(data));
-        auto request = *holder;
+        std::unique_ptr<RequestContext> holder(static_cast<RequestContext *>(data));
+        auto request = holder->request;
         bool expired = false;
         {
             std::lock_guard<std::mutex> lock(request->mutex);
@@ -459,7 +469,7 @@ private:
         ani_ref callback = nullptr;
         ani_array aniIds = nullptr;
         if (!FindCallbackFunction(
-                env, request->providerRef, "onCancel", "virtualFileOnCancelFunc", callback, function)) {
+            env, request->providerRef, "onCancel", "virtualFileOnCancelFunc", callback, function)) {
             LOG_ERROR(UDMF_ANI, "Find virtual entry cancel callback failed");
             return -EIO;
         }
@@ -544,58 +554,80 @@ int32_t VirtualEntryProviderTaihe::OnRemoteRequest(
     if (!UTILS::IsNativeCallingToken() || request.ReadInterfaceToken() != GetDescriptor()) {
         return -EACCES;
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::STAT)) {
-        VirtualEntry entry;
-        int32_t ret = Stat(request.ReadString(), entry);
-        bool failed = !reply.WriteInt32(ret);
-        if (ret == 0) {
-            failed = failed || !reply.WriteString(entry.id) || !reply.WriteString(entry.name) ||
-                     !reply.WriteInt32(static_cast<int32_t>(entry.type)) || !reply.WriteInt64(entry.modifyTime) ||
-                     !reply.WriteInt64(entry.size);
-        }
-        return failed ? -EIO : 0;
+    switch (code) {
+        case static_cast<uint32_t>(VirtualEntryProviderCode::STAT):
+            return HandleStatRequest(request, reply);
+        case static_cast<uint32_t>(VirtualEntryProviderCode::READ):
+            return HandleReadRequest(request, reply);
+        case static_cast<uint32_t>(VirtualEntryProviderCode::READ_ASYNC):
+            return HandleAsyncReadRequest(request);
+        case static_cast<uint32_t>(VirtualEntryProviderCode::CANCEL):
+            return HandleCancelRequest(request, reply);
+        default:
+            return IRemoteStub<IVirtualEntryProvider>::OnRemoteRequest(code, request, reply, option);
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::READ)) {
-        std::vector<uint8_t> bytes;
-        int32_t ret = Read(request.ReadString(), request.ReadInt64(), request.ReadInt32(), bytes);
-        if (!reply.WriteInt32(ret) || !reply.WriteUint32(static_cast<uint32_t>(bytes.size()))) {
-            return -EIO;
-        }
-        if (ret != 0 || bytes.empty()) {
-            return 0;
-        }
-        sptr<Ashmem> memory = Ashmem::CreateAshmem(VIRTUAL_ENTRY_ASHMEM_NAME, static_cast<int32_t>(bytes.size()));
-        if (memory == nullptr || !memory->MapReadAndWriteAshmem()) {
-            return -ENOMEM;
-        }
-        bool written = memory->WriteToAshmem(bytes.data(), bytes.size(), 0);
-        memory->UnmapAshmem();
-        if (!written || !reply.WriteAshmem(memory)) {
-            memory->CloseAshmem();
-            return -EIO;
-        }
+}
+
+int32_t VirtualEntryProviderTaihe::HandleStatRequest(MessageParcel &request, MessageParcel &reply)
+{
+    VirtualEntry entry;
+    int32_t ret = Stat(request.ReadString(), entry);
+    bool failed = !reply.WriteInt32(ret);
+    if (ret == 0) {
+        failed = failed || !reply.WriteString(entry.id) || !reply.WriteString(entry.name) ||
+            !reply.WriteInt32(static_cast<int32_t>(entry.type)) || !reply.WriteInt64(entry.modifyTime) ||
+            !reply.WriteInt64(entry.size);
+    }
+    return failed ? -EIO : 0;
+}
+
+int32_t VirtualEntryProviderTaihe::HandleReadRequest(MessageParcel &request, MessageParcel &reply)
+{
+    std::string id = request.ReadString();
+    int64_t offset = request.ReadInt64();
+    int32_t length = request.ReadInt32();
+    std::vector<uint8_t> bytes;
+    int32_t ret = Read(id, offset, length, bytes);
+    if (!reply.WriteInt32(ret) || !reply.WriteUint32(static_cast<uint32_t>(bytes.size()))) {
+        return -EIO;
+    }
+    if (ret != 0 || bytes.empty()) {
         return 0;
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::READ_ASYNC)) {
-        std::string id;
-        int64_t offset = 0;
-        int32_t length = 0;
-        sptr<IRemoteObject> callback;
-        if (!request.ReadString(id) || !request.ReadInt64(offset) || !request.ReadInt32(length) ||
-            (callback = request.ReadRemoteObject()) == nullptr) {
-            return -EINVAL;
-        }
-        std::vector<uint8_t> bytes;
-        int32_t ret = Read(id, offset, length, bytes);
-        VirtualEntryReadCallbackProxy callbackProxy(callback);
-        return callbackProxy.OnResult(ret, bytes);
+    sptr<Ashmem> memory = Ashmem::CreateAshmem(VIRTUAL_ENTRY_ASHMEM_NAME, static_cast<int32_t>(bytes.size()));
+    if (memory == nullptr || !memory->MapReadAndWriteAshmem()) {
+        return -ENOMEM;
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::CANCEL)) {
-        std::vector<std::string> ids;
-        int32_t ret = request.ReadStringVector(&ids) ? Cancel(ids) : -EINVAL;
-        return reply.WriteInt32(ret) ? 0 : -EIO;
+    bool written = memory->WriteToAshmem(bytes.data(), bytes.size(), 0);
+    memory->UnmapAshmem();
+    if (!written || !reply.WriteAshmem(memory)) {
+        memory->CloseAshmem();
+        return -EIO;
     }
-    return IRemoteStub<IVirtualEntryProvider>::OnRemoteRequest(code, request, reply, option);
+    return 0;
+}
+
+int32_t VirtualEntryProviderTaihe::HandleAsyncReadRequest(MessageParcel &request)
+{
+    std::string id;
+    int64_t offset = 0;
+    int32_t length = 0;
+    sptr<IRemoteObject> callback;
+    if (!request.ReadString(id) || !request.ReadInt64(offset) || !request.ReadInt32(length) ||
+        (callback = request.ReadRemoteObject()) == nullptr) {
+        return -EINVAL;
+    }
+    std::vector<uint8_t> bytes;
+    int32_t ret = Read(id, offset, length, bytes);
+    VirtualEntryReadCallbackProxy callbackProxy(callback);
+    return callbackProxy.OnResult(ret, bytes);
+}
+
+int32_t VirtualEntryProviderTaihe::HandleCancelRequest(MessageParcel &request, MessageParcel &reply)
+{
+    std::vector<std::string> ids;
+    int32_t ret = request.ReadStringVector(&ids) ? Cancel(ids) : -EINVAL;
+    return reply.WriteInt32(ret) ? 0 : -EIO;
 }
 } // namespace
 

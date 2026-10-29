@@ -327,6 +327,12 @@ void VirtualEntryProviderNapi::CallJs(napi_env env, napi_value callback, void *c
         FailRequest(request, status);
         return;
     }
+    InvokeCallback(env, provider, function, request);
+}
+
+void VirtualEntryProviderNapi::InvokeCallback(napi_env env, napi_value provider, napi_value function,
+    const std::shared_ptr<Request> &request)
+{
     napi_value arguments[MAX_CALLBACK_ARGUMENT_COUNT] = { nullptr };
     size_t argumentCount = 0;
     if (!BuildArguments(env, request, arguments, argumentCount)) {
@@ -452,74 +458,91 @@ void VirtualEntryProviderNapi::TsfnFinalizer(napi_env env, void *data, void *hin
 int32_t VirtualEntryProviderNapi::OnRemoteRequest(
     uint32_t code, MessageParcel &request, MessageParcel &reply, MessageOption &option)
 {
-    (void)option;
     if (!UTILS::IsNativeCallingToken() || request.ReadInterfaceToken() != GetDescriptor()) {
         LOG_ERROR(UDMF_KITS_NAPI, "Reject virtual entry provider request, code=%{public}u", code);
         return -EACCES;
     }
-    int32_t ret = -EINVAL;
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::STAT)) {
-        VirtualEntry entry;
-        ret = Stat(request.ReadString(), entry);
-        bool writeFailed = !reply.WriteInt32(ret);
-        if (ret == 0) {
-            writeFailed = writeFailed || !reply.WriteString(entry.id) || !reply.WriteString(entry.name) ||
-                !reply.WriteInt32(static_cast<int32_t>(entry.type)) || !reply.WriteInt64(entry.modifyTime) ||
-                !reply.WriteInt64(entry.size);
-        }
-        if (writeFailed) {
-            return -EIO;
-        }
+    switch (code) {
+        case static_cast<uint32_t>(VirtualEntryProviderCode::STAT):
+            return HandleStatRequest(request, reply);
+        case static_cast<uint32_t>(VirtualEntryProviderCode::READ):
+            return HandleReadRequest(request, reply);
+        case static_cast<uint32_t>(VirtualEntryProviderCode::READ_ASYNC):
+            return HandleAsyncReadRequest(request);
+        case static_cast<uint32_t>(VirtualEntryProviderCode::CANCEL):
+            return HandleCancelRequest(request, reply);
+        default:
+            return IRemoteStub<IVirtualEntryProvider>::OnRemoteRequest(code, request, reply, option);
+    }
+}
+
+int32_t VirtualEntryProviderNapi::HandleStatRequest(MessageParcel &request, MessageParcel &reply)
+{
+    VirtualEntry entry;
+    int32_t ret = Stat(request.ReadString(), entry);
+    bool writeFailed = !reply.WriteInt32(ret);
+    if (ret == 0) {
+        writeFailed = writeFailed || !reply.WriteString(entry.id) || !reply.WriteString(entry.name) ||
+            !reply.WriteInt32(static_cast<int32_t>(entry.type)) || !reply.WriteInt64(entry.modifyTime) ||
+            !reply.WriteInt64(entry.size);
+    }
+    if (writeFailed) {
+        return -EIO;
+    }
+    return 0;
+}
+
+int32_t VirtualEntryProviderNapi::HandleReadRequest(MessageParcel &request, MessageParcel &reply)
+{
+    std::string id = request.ReadString();
+    int64_t offset = request.ReadInt64();
+    int32_t length = request.ReadInt32();
+    std::vector<uint8_t> bytes;
+    int32_t ret = Read(id, offset, length, bytes);
+    if (ret != 0) {
+        LOG_ERROR(UDMF_KITS_NAPI,
+            "Virtual entry read request failed, offset=%{public}" PRId64 ", length=%{public}d, ret=%{public}d",
+            offset, length, ret);
+    }
+    if (!reply.WriteInt32(ret) || !reply.WriteUint32(bytes.size())) {
+        return -EIO;
+    }
+    if (ret != 0 || bytes.empty()) {
         return 0;
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::READ)) {
-        std::string id = request.ReadString();
-        int64_t offset = request.ReadInt64();
-        int32_t length = request.ReadInt32();
-        std::vector<uint8_t> bytes;
-        ret = Read(id, offset, length, bytes);
-        if (ret != 0) {
-            LOG_ERROR(UDMF_KITS_NAPI,
-                "Virtual entry read request failed, offset=%{public}" PRId64 ", length=%{public}d, ret=%{public}d",
-                offset, length, ret);
-        }
-        if (!reply.WriteInt32(ret) || !reply.WriteUint32(bytes.size())) {
-            return -EIO;
-        }
-        if (ret != 0 || bytes.empty()) {
-            return 0;
-        }
-        sptr<Ashmem> memory = Ashmem::CreateAshmem(VIRTUAL_ENTRY_ASHMEM_NAME, static_cast<int32_t>(bytes.size()));
-        if (memory == nullptr || !memory->MapReadAndWriteAshmem()) {
-            return -ENOMEM;
-        }
-        bool written = memory->WriteToAshmem(bytes.data(), bytes.size(), 0);
-        memory->UnmapAshmem();
-        if (!written || !reply.WriteAshmem(memory)) {
-            memory->CloseAshmem();
-            return -EIO;
-        }
-        return 0;
+    sptr<Ashmem> memory = Ashmem::CreateAshmem(VIRTUAL_ENTRY_ASHMEM_NAME, static_cast<int32_t>(bytes.size()));
+    if (memory == nullptr || !memory->MapReadAndWriteAshmem()) {
+        return -ENOMEM;
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::READ_ASYNC)) {
-        std::string id;
-        int64_t offset = 0;
-        int32_t length = 0;
-        sptr<IRemoteObject> callback;
-        if (!request.ReadString(id) || !request.ReadInt64(offset) || !request.ReadInt32(length) ||
-            (callback = request.ReadRemoteObject()) == nullptr) {
-            return -EINVAL;
-        }
-        std::vector<uint8_t> bytes;
-        ret = Read(id, offset, length, bytes);
-        VirtualEntryReadCallbackProxy callbackProxy(callback);
-        return callbackProxy.OnResult(ret, bytes);
+    bool written = memory->WriteToAshmem(bytes.data(), bytes.size(), 0);
+    memory->UnmapAshmem();
+    if (!written || !reply.WriteAshmem(memory)) {
+        memory->CloseAshmem();
+        return -EIO;
     }
-    if (code == static_cast<uint32_t>(VirtualEntryProviderCode::CANCEL)) {
-        std::vector<std::string> ids;
-        ret = request.ReadStringVector(&ids) ? Cancel(ids) : -EINVAL;
-        return reply.WriteInt32(ret) ? 0 : -EIO;
+    return 0;
+}
+
+int32_t VirtualEntryProviderNapi::HandleAsyncReadRequest(MessageParcel &request)
+{
+    std::string id;
+    int64_t offset = 0;
+    int32_t length = 0;
+    sptr<IRemoteObject> callback;
+    if (!request.ReadString(id) || !request.ReadInt64(offset) || !request.ReadInt32(length) ||
+        (callback = request.ReadRemoteObject()) == nullptr) {
+        return -EINVAL;
     }
-    return IRemoteStub<IVirtualEntryProvider>::OnRemoteRequest(code, request, reply, option);
+    std::vector<uint8_t> bytes;
+    int32_t ret = Read(id, offset, length, bytes);
+    VirtualEntryReadCallbackProxy callbackProxy(callback);
+    return callbackProxy.OnResult(ret, bytes);
+}
+
+int32_t VirtualEntryProviderNapi::HandleCancelRequest(MessageParcel &request, MessageParcel &reply)
+{
+    std::vector<std::string> ids;
+    int32_t ret = request.ReadStringVector(&ids) ? Cancel(ids) : -EINVAL;
+    return reply.WriteInt32(ret) ? 0 : -EIO;
 }
 } // namespace OHOS::UDMF
