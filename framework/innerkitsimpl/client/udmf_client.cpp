@@ -268,7 +268,7 @@ Status UdmfClient::GetData(const QueryOption &query, UnifiedData &unifiedData)
 bool VirtualEntryAttachmentRegistry::Attach(const std::shared_ptr<File> &file, const VirtualEntry &entry,
     const sptr<IRemoteObject> &provider, const void *owner)
 {
-    if (file == nullptr || provider == nullptr || owner == nullptr) {
+    if (file == nullptr || provider == nullptr || owner == nullptr || !entry.HasValidFileSizes()) {
         return false;
     }
     std::lock_guard<std::mutex> lock(g_virtualEntryMutex);

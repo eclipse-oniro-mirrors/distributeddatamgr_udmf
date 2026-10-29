@@ -15,11 +15,27 @@
 #define LOG_TAG "VirtualEntryNapi"
 #include "virtual_entry_napi.h"
 
+#include <cmath>
+#include <limits>
+
 #include "file.h"
+#include "napi_data_utils.h"
 #include "virtual_entry_provider_napi.h"
 #include "virtual_entry_attachment_registry.h"
 
 namespace OHOS::UDMF {
+bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size)
+{
+    double number = 0;
+    const double upperBound = -static_cast<double>(std::numeric_limits<int64_t>::min());
+    if (NapiDataUtils::GetValue(env, value, number) != napi_ok || !std::isfinite(number) || number < 0 ||
+        number >= upperBound || std::trunc(number) != number) {
+        return false;
+    }
+    size = static_cast<int64_t>(number);
+    return true;
+}
+
 VirtualEntryNapiRegistry &VirtualEntryNapiRegistry::GetInstance()
 {
     static VirtualEntryNapiRegistry registry;

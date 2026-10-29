@@ -43,7 +43,7 @@ bool ParseEntry(MessageParcel &reply, VirtualEntry &entry)
         !reply.ReadInt64(entry.modifyTime) || !reply.ReadInt64(entry.size)) {
         return false;
     }
-    if (type != static_cast<int32_t>(VirtualEntryType::FILE) || entry.size < -1) {
+    if (type != static_cast<int32_t>(VirtualEntryType::FILE) || entry.size < 0) {
         return false;
     }
     entry.type = static_cast<VirtualEntryType>(type);

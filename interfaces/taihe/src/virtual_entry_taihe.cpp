@@ -113,11 +113,7 @@ bool ParseVirtualFile(ani_env *env, ani_object object, VirtualEntry &entry)
     if (!GetStringProperty(env, object, "id", entry.id) || !IsValidId(entry.id)) {
         return false;
     }
-    ani_ref size = nullptr;
-    if (!GetProperty(env, object, "size", size) || IsNullOrUndefined(env, static_cast<ani_object>(size))) {
-        return true;
-    }
-    return GetLong(env, static_cast<ani_object>(size), entry.size) == ANI_OK && entry.size >= 0;
+    return env->Object_GetPropertyByName_Long(object, "size", &entry.size) == ANI_OK && entry.size >= 0;
 }
 
 bool ParseVirtualDirectory(ani_env *env, ani_object object, VirtualEntry &entry, uint32_t depth, uint32_t &itemCount)
@@ -164,19 +160,6 @@ bool ParseVirtualItem(ani_env *env, ani_object object, VirtualEntry &entry, uint
     return type == "dir" && ParseVirtualDirectory(env, object, entry, depth, itemCount);
 }
 
-bool NeedsStatCallback(const VirtualEntry &entry)
-{
-    if (entry.type == VirtualEntryType::FILE) {
-        return entry.size < 0;
-    }
-    for (const auto &child : entry.subItems) {
-        if (NeedsStatCallback(child)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool HasCallback(ani_env *env, ani_object provider, const char *name)
 {
     ani_ref callback = nullptr;
@@ -185,10 +168,10 @@ bool HasCallback(ani_env *env, ani_object provider, const char *name)
 
 class VirtualEntryProviderTaihe final : public IRemoteStub<IVirtualEntryProvider> {
 public:
-    static sptr<VirtualEntryProviderTaihe> Create(ani_env *env, ani_object provider, bool needsStat)
+    static sptr<VirtualEntryProviderTaihe> Create(ani_env *env, ani_object provider)
     {
         if (env == nullptr || provider == nullptr || !HasCallback(env, provider, "onRead") ||
-            !HasCallback(env, provider, "onCancel") || (needsStat && !HasCallback(env, provider, "onStat"))) {
+            !HasCallback(env, provider, "onCancel")) {
             return nullptr;
         }
         ani_vm *vm = nullptr;
@@ -644,7 +627,7 @@ bool VirtualEntryTaihe::Attach(ani_env *env, uintptr_t virtualEntry, const std::
         !ParseVirtualItem(env, static_cast<ani_object>(itemInfo), entry, 0, itemCount)) {
         return false;
     }
-    auto providerStub = VirtualEntryProviderTaihe::Create(env, provider, NeedsStatCallback(entry));
+    auto providerStub = VirtualEntryProviderTaihe::Create(env, provider);
     return providerStub != nullptr &&
            VirtualEntryAttachmentRegistry::Attach(file, entry, providerStub->AsObject(), providerStub.GetRefPtr());
 }

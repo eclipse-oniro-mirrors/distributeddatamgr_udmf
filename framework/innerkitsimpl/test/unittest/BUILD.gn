@@ -1170,7 +1170,10 @@ ohos_unittest("UnifiedHtmlRecordProcessTest") {
 ohos_unittest("VirtualEntryProviderProxyTest") {
   module_out_path = module_output_path
 
-  sources = [ "virtual_entry_provider_proxy_test.cpp" ]
+  sources = [
+    "virtual_entry_provider_proxy_test.cpp",
+    "virtual_entry_size_test.cpp",
+  ]
 
   configs = [ ":module_private_config" ]
 

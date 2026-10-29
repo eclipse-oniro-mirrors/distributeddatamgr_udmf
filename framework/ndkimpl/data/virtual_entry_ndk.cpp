@@ -66,7 +66,7 @@ bool ValidateVirtualEntry(const VirtualEntry &entry, uint32_t depth, uint32_t &i
     }
     ++itemCount;
     if (entry.type == VirtualEntryType::FILE) {
-        return IsValidId(entry.id) && entry.size >= -1 && entry.subItems.empty();
+        return IsValidId(entry.id) && entry.size >= 0 && entry.subItems.empty();
     }
     if (entry.type != VirtualEntryType::DIRECTORY || !entry.id.empty() || entry.size != -1) {
         return false;
@@ -83,19 +83,6 @@ bool IsValidVirtualEntry(const VirtualEntry &entry)
 {
     uint32_t itemCount = 0;
     return ValidateVirtualEntry(entry, 0, itemCount);
-}
-
-bool NeedsStatCallback(const VirtualEntry &entry)
-{
-    if (entry.type == VirtualEntryType::FILE) {
-        return entry.size < 0;
-    }
-    for (const auto &child : entry.subItems) {
-        if (NeedsStatCallback(child)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 int32_t ConvertCallbackStatus(int status)
@@ -307,7 +294,7 @@ NdkVirtualEntryCallbacks::~NdkVirtualEntryCallbacks()
 
 sptr<IVirtualEntryProvider> CreateNdkVirtualEntryProvider(const std::shared_ptr<NdkVirtualEntryInfo> &info)
 {
-    if (info == nullptr || info->callbacks == nullptr) {
+    if (info == nullptr || info->callbacks == nullptr || !IsValidVirtualEntry(info->entry)) {
         return nullptr;
     }
     return new (std::nothrow) VirtualEntryProviderNdk(info);
@@ -424,8 +411,7 @@ OH_UdmfVirtualFileInfo *OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem *
         return nullptr;
     }
     std::lock_guard<std::mutex> lock(itemInfo->mutex);
-    if (!OHOS::UDMF::IsValidVirtualEntry(itemInfo->entry_) ||
-        (OHOS::UDMF::NeedsStatCallback(itemInfo->entry_) && callbacks->onStat == nullptr)) {
+    if (!OHOS::UDMF::IsValidVirtualEntry(itemInfo->entry_)) {
         return nullptr;
     }
     auto *result = new (std::nothrow) OH_UdmfVirtualFileInfo();

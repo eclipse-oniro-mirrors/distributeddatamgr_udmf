@@ -212,7 +212,7 @@ typedef void (*OH_UdmfVirtualFile_Finalize)(void* context);
  * @brief Describes callbacks used to provide virtual file metadata and content.
  *
  * Set <code>structSize</code> to <code>sizeof(OH_UdmfVirtualFileCallbacks)</code>. <code>onRead</code> and
- * <code>onCancel</code> are required. <code>onStat</code> is required when any file item has no size.
+ * <code>onCancel</code> are required. <code>onStat</code> is optional; every file must already declare its size.
  * Callbacks can be invoked concurrently on different threads and must not block indefinitely.
  *
  * @since 26.1.0
@@ -887,7 +887,10 @@ int OH_UdsFileUri_SetDetails(OH_UdsFileUri* pThis, const OH_UdsDetails* details)
 int OH_UdsFileUri_SetAuthPolicy(OH_UdsFileUri* pThis, uint32_t authPolicy);
 
 /**
- * @brief Creates a virtual file item with an unknown file size.
+ * @brief Creates a virtual file item that requires an explicit file size.
+ *
+ * Call {@link OH_UdmfVirtualItem_SetFileSize} before adding the item to a directory or creating virtual file
+ * information. A size of zero describes an empty file; it is never inferred from an unset size.
  *
  * @param name File name. It must not contain a path separator.
  * @param id Identifier passed to virtual file callbacks.
@@ -932,7 +935,10 @@ void OH_UdmfVirtualItem_Destroy(OH_UdmfVirtualItem* item);
 int OH_UdmfVirtualItem_SetFileSize(OH_UdmfVirtualItem* item, int64_t size);
 
 /**
- * @brief Clears the size of a virtual file item so metadata is obtained through the stat callback.
+ * @brief Resets the required size of a virtual file item during construction.
+ *
+ * The item cannot be added to a directory or used to create virtual file information until
+ * {@link OH_UdmfVirtualItem_SetFileSize} sets a non-negative size again. A stat callback does not replace this step.
  *
  * @param item Virtual file item.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
@@ -965,7 +971,7 @@ int OH_UdmfVirtualItem_AddChild(OH_UdmfVirtualItem* directory, const OH_UdmfVirt
  * The item tree and callback table are copied. If <code>context</code> is not nullptr, <code>finalize</code> must be
  * provided. After this function succeeds, UDMF owns the context until the final reference is released.
  *
- * @param itemInfo Root virtual item.
+ * @param itemInfo Root virtual item. Every file in the tree must have an explicit non-negative size.
  * @param callbacks Virtual file callbacks.
  * @param context User context passed to each callback.
  * @param finalize Callback used to release <code>context</code>.

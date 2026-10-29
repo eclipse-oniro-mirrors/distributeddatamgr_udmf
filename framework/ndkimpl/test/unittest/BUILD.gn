@@ -124,7 +124,10 @@ udmf_test_impl_sources = [
   "${udmf_framework_path}/ndkimpl/data/virtual_entry_ndk.cpp",
 ]
 
-udmf_test_impl_deps = [ "${udmf_interfaces_path}/innerkits:utd_client" ]
+udmf_test_impl_deps = [
+  "${udmf_interfaces_path}/innerkits:utd_client",
+  "${udmf_interfaces_path}/innerkits:virtual_entry_provider_proxy",
+]
 
 ohos_unittest("UtdTest") {
   module_out_path = module_output_path
@@ -157,7 +160,10 @@ ohos_unittest("UdsTest") {
 ohos_unittest("UdmfTest") {
   module_out_path = module_output_path
 
-  sources = udmf_test_impl_sources + [ "udmf_test.cpp" ]
+  sources = udmf_test_impl_sources + [
+              "udmf_test.cpp",
+              "virtual_entry_capi_test.cpp",
+            ]
 
   configs = [ ":module_private_config" ]
 

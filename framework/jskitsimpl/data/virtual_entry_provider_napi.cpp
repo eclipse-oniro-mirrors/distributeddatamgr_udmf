@@ -25,6 +25,7 @@
 #include "logger.h"
 #include "napi_data_utils.h"
 #include "udmf_utils.h"
+#include "virtual_entry_napi.h"
 #include "virtual_entry_read_callback_proxy.h"
 
 namespace OHOS::UDMF {
@@ -61,18 +62,10 @@ bool ParseStat(napi_env env, napi_value value, VirtualEntry &entry)
         return false;
     }
     entry.type = VirtualEntryType::FILE;
-    bool hasSize = false;
-    if (napi_has_named_property(env, value, "size", &hasSize) != napi_ok) {
-        return false;
-    }
-    if (!hasSize) {
-        return true;
-    }
     if (napi_get_named_property(env, value, "size", &field) != napi_ok) {
         return false;
     }
-    return NapiDataUtils::IsUndefinedOrNull(env, field) ||
-           (NapiDataUtils::GetValue(env, field, entry.size) == napi_ok && entry.size >= 0);
+    return ParseVirtualFileSize(env, field, entry.size);
 }
 } // namespace
 

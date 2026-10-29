@@ -34,8 +34,30 @@ struct VirtualEntry {
     std::string name;
     VirtualEntryType type{ VirtualEntryType::FILE };
     int64_t modifyTime{ 0 };
+    // A file must declare a non-negative size before it can be published.
+    // -1 is only the unset construction state and directory sentinel.
     int64_t size{ -1 };
     std::vector<VirtualEntry> subItems;
+
+    bool HasValidFileSizes(uint32_t depth = 0) const
+    {
+        constexpr uint32_t maxDepth = 64;
+        if (depth > maxDepth) {
+            return false;
+        }
+        if (type == VirtualEntryType::FILE) {
+            return size >= 0;
+        }
+        if (type != VirtualEntryType::DIRECTORY) {
+            return false;
+        }
+        for (const auto &child : subItems) {
+            if (!child.HasValidFileSizes(depth + 1)) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 } // namespace OHOS::UDMF
 

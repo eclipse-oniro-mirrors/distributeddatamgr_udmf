@@ -15,9 +15,13 @@
 
 #include "virtual_entry_request_coordinator.h"
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <future>
 #include <mutex>
+#include <thread>
+#include <vector>
 
 #include "gtest/gtest.h"
 
@@ -76,5 +80,177 @@ HWTEST_F(VirtualEntryRequestCoordinatorTest, Wait_RequestAlreadyCompleted_Return
     std::unique_lock<std::mutex> lock(mutex);
 
     EXPECT_TRUE(coordinator.Wait(condition, lock, [] { return true; }));
+}
+
+/**
+ * @tc.name: TryAcquire_ZeroLimit_RejectEveryRequest
+ * @tc.desc: Verify zero capacity cannot be increased by releasing an unacquired slot.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryRequestCoordinatorTest, TryAcquire_ZeroLimit_RejectEveryRequest, TestSize.Level0)
+{
+    VirtualEntryRequestCoordinator coordinator(0);
+    EXPECT_FALSE(coordinator.TryAcquire());
+    coordinator.Release();
+    EXPECT_FALSE(coordinator.TryAcquire());
+}
+
+/**
+ * @tc.name: Release_EmptyCounter_PreserveAvailableCapacity
+ * @tc.desc: Verify repeated releases at zero do not underflow or create extra slots.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryRequestCoordinatorTest, Release_EmptyCounter_PreserveAvailableCapacity, TestSize.Level0)
+{
+    VirtualEntryRequestCoordinator coordinator(1);
+    coordinator.Release();
+    coordinator.Release();
+    EXPECT_TRUE(coordinator.TryAcquire());
+    EXPECT_FALSE(coordinator.TryAcquire());
+    coordinator.Release();
+    coordinator.Release();
+    EXPECT_TRUE(coordinator.TryAcquire());
+    EXPECT_FALSE(coordinator.TryAcquire());
+    coordinator.Release();
+}
+
+/**
+ * @tc.name: TryAcquire_DefaultLimit_AllowExactlyEightReads
+ * @tc.desc: Verify the default process quota and its reuse after every slot is released.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryRequestCoordinatorTest, TryAcquire_DefaultLimit_AllowExactlyEightReads, TestSize.Level0)
+{
+    VirtualEntryRequestCoordinator coordinator;
+    for (size_t index = 0; index < 8; ++index) {
+        EXPECT_TRUE(coordinator.TryAcquire());
+    }
+    EXPECT_FALSE(coordinator.TryAcquire());
+    for (size_t index = 0; index < 8; ++index) {
+        coordinator.Release();
+    }
+    EXPECT_TRUE(coordinator.TryAcquire());
+    coordinator.Release();
+}
+
+/**
+ * @tc.name: Wait_CompletionNotified_WakeBeforeDeadline
+ * @tc.desc: Verify completion under the request lock wakes a waiting callback without polling.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryRequestCoordinatorTest, Wait_CompletionNotified_WakeBeforeDeadline, TestSize.Level0)
+{
+    VirtualEntryRequestCoordinator coordinator(1, std::chrono::seconds(2));
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::promise<void> waiting;
+    bool completed = false;
+    bool result = false;
+    std::thread reader([&] {
+        std::unique_lock<std::mutex> lock(mutex);
+        waiting.set_value();
+        result = coordinator.Wait(condition, lock, [&] { return completed; });
+    });
+    waiting.get_future().wait();
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        completed = true;
+    }
+    condition.notify_all();
+    reader.join();
+    EXPECT_TRUE(result);
+}
+
+/**
+ * @tc.name: TryAcquire_ConcurrentReaders_RespectQuotaAndReleaseAllSlots
+ * @tc.desc: Verify contending reads cannot exceed the configured quota or leak slots.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryRequestCoordinatorTest, TryAcquire_ConcurrentReaders_RespectQuotaAndReleaseAllSlots,
+    TestSize.Level0)
+{
+    constexpr size_t quota = 3;
+    VirtualEntryRequestCoordinator coordinator(quota);
+    std::promise<void> begin;
+    auto start = begin.get_future().share();
+    std::atomic<size_t> inFlight{ 0 };
+    std::atomic<size_t> violations{ 0 };
+    std::atomic<size_t> accepted{ 0 };
+    std::vector<std::thread> readers;
+    for (size_t index = 0; index < 16; ++index) {
+        readers.emplace_back([&] {
+            start.wait();
+            for (size_t attempt = 0; attempt < 2000; ++attempt) {
+                if (!coordinator.TryAcquire()) {
+                    continue;
+                }
+                ++accepted;
+                if (++inFlight > quota) {
+                    ++violations;
+                }
+                std::this_thread::yield();
+                --inFlight;
+                coordinator.Release();
+            }
+        });
+    }
+    begin.set_value();
+    for (auto &reader : readers) {
+        reader.join();
+    }
+    EXPECT_GT(accepted.load(), 0u);
+    EXPECT_EQ(violations.load(), 0u);
+    EXPECT_EQ(inFlight.load(), 0u);
+    for (size_t index = 0; index < quota; ++index) {
+        EXPECT_TRUE(coordinator.TryAcquire());
+    }
+    EXPECT_FALSE(coordinator.TryAcquire());
+    for (size_t index = 0; index < quota; ++index) {
+        coordinator.Release();
+    }
+}
+
+/**
+ * @tc.name: Release_ContendingReleases_ReturnEverySlot
+ * @tc.desc: Verify concurrent decrements retry failed comparisons and preserve exact capacity.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryRequestCoordinatorTest, Release_ContendingReleases_ReturnEverySlot, TestSize.Level0)
+{
+    constexpr size_t threads = 32;
+    constexpr size_t slotsPerThread = 128;
+    constexpr size_t capacity = threads * slotsPerThread;
+    VirtualEntryRequestCoordinator coordinator(capacity);
+    for (size_t index = 0; index < capacity; ++index) {
+        ASSERT_TRUE(coordinator.TryAcquire());
+    }
+    std::promise<void> begin;
+    auto start = begin.get_future().share();
+    std::vector<std::thread> releasers;
+    for (size_t index = 0; index < threads; ++index) {
+        releasers.emplace_back([&] {
+            start.wait();
+            for (size_t slot = 0; slot < slotsPerThread; ++slot) {
+                coordinator.Release();
+            }
+        });
+    }
+    begin.set_value();
+    for (auto &releaser : releasers) {
+        releaser.join();
+    }
+    for (size_t index = 0; index < capacity; ++index) {
+        EXPECT_TRUE(coordinator.TryAcquire());
+    }
+    EXPECT_FALSE(coordinator.TryAcquire());
+    for (size_t index = 0; index < capacity; ++index) {
+        coordinator.Release();
+    }
 }
 } // namespace OHOS::UDMF

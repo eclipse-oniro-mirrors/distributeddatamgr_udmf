@@ -15,7 +15,6 @@
 #define LOG_TAG "FileNapi"
 #include "file_napi.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "file.h"
@@ -73,10 +72,7 @@ bool ParseVirtualFile(napi_env env, napi_value value, VirtualEntry &item)
         item.id.size() > MAX_VIRTUAL_ENTRY_ID_BYTES) {
         return false;
     }
-    if (!GetNamedProperty(env, value, "size", property) || NapiDataUtils::IsUndefinedOrNull(env, property)) {
-        return true;
-    }
-    return NapiDataUtils::GetValue(env, property, item.size) == napi_ok && item.size >= 0;
+    return GetNamedProperty(env, value, "size", property) && ParseVirtualFileSize(env, property, item.size);
 }
 
 bool ParseVirtualDirectory(
@@ -122,14 +118,6 @@ bool ParseVirtualItem(napi_env env, napi_value value, VirtualEntry &item, uint32
         return ParseVirtualFile(env, value, item);
     }
     return itemType == "dir" && ParseVirtualDirectory(env, value, item, depth, itemCount);
-}
-
-bool NeedsStatCallback(const VirtualEntry &entry)
-{
-    if (entry.type == VirtualEntryType::FILE) {
-        return entry.size < 0;
-    }
-    return std::any_of(entry.subItems.begin(), entry.subItems.end(), NeedsStatCallback);
 }
 
 bool IsVirtualEntryProvider(napi_env env, napi_value value, bool &hasOnStat)
@@ -178,7 +166,7 @@ bool FileNapi::AttachVirtualEntry(napi_env env, napi_value fileUri, const std::s
         return true;
     }
     return IsVirtualEntryProvider(env, provider, hasOnStat) && GetNamedProperty(env, provider, "itemInfo", root) &&
-           ParseVirtualItem(env, root, itemInfo, 0, itemCount) && (!NeedsStatCallback(itemInfo) || hasOnStat) &&
+           ParseVirtualItem(env, root, itemInfo, 0, itemCount) &&
            VirtualEntryNapiRegistry::GetInstance().Put(file, env, provider, std::move(itemInfo));
 }
 

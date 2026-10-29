@@ -31,7 +31,7 @@ export interface VirtualBaseItem {
 export interface VirtualFileItem extends VirtualBaseItem {
   id: string;
   readonly type: 'file';
-  size?: long;
+  size: long;
 }
 
 export interface VirtualDirItem extends VirtualBaseItem {

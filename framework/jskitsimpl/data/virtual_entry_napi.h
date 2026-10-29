@@ -26,6 +26,8 @@
 namespace OHOS::UDMF {
 class File;
 
+bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size);
+
 class VirtualEntryNapiRegistry final {
 public:
     static VirtualEntryNapiRegistry &GetInstance();

@@ -370,7 +370,7 @@ int32_t UdmfServiceClient::RegisterVirtualEntry(const std::string &key, uint32_t
     const VirtualEntry &entry,
     sptr<IRemoteObject> provider)
 {
-    if (key.empty() || provider == nullptr) {
+    if (key.empty() || provider == nullptr || !entry.HasValidFileSizes()) {
         return E_INVALID_PARAMETERS;
     }
     return udmfProxy_->RegisterVirtualEntry(key, recordIndex, entry, provider);
