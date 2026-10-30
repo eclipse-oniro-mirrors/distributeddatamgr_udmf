@@ -170,8 +170,7 @@ class VirtualEntryProviderTaihe final : public IRemoteStub<IVirtualEntryProvider
 public:
     static sptr<VirtualEntryProviderTaihe> Create(ani_env *env, ani_object provider)
     {
-        if (env == nullptr || provider == nullptr || !HasCallback(env, provider, "onRead") ||
-            !HasCallback(env, provider, "onCancel")) {
+        if (env == nullptr || provider == nullptr || !HasCallback(env, provider, "onRead")) {
             return nullptr;
         }
         ani_vm *vm = nullptr;
@@ -448,6 +447,14 @@ private:
 
     static int32_t ExecuteCancel(ani_env *env, const std::shared_ptr<Request> &request)
     {
+        ani_ref cancelCallback = nullptr;
+        if (!GetProperty(env, static_cast<ani_object>(request->providerRef), "onCancel", cancelCallback)) {
+            LOG_ERROR(UDMF_ANI, "Get virtual entry cancel callback failed");
+            return -EIO;
+        }
+        if (IsNullOrUndefined(env, static_cast<ani_object>(cancelCallback))) {
+            return 0;
+        }
         ani_function function = nullptr;
         ani_ref callback = nullptr;
         ani_array aniIds = nullptr;

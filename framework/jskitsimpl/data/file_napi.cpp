@@ -128,8 +128,11 @@ bool IsVirtualEntryProvider(napi_env env, napi_value value, bool &hasOnStat)
         return false;
     }
     napi_value callback = nullptr;
-    if (!GetNamedProperty(env, value, "onRead", callback) || !IsFunction(env, callback) ||
-        !GetNamedProperty(env, value, "onCancel", callback) || !IsFunction(env, callback)) {
+    if (!GetNamedProperty(env, value, "onRead", callback) || !IsFunction(env, callback)) {
+        return false;
+    }
+    if (!GetNamedProperty(env, value, "onCancel", callback) ||
+        (!NapiDataUtils::IsUndefinedOrNull(env, callback) && !IsFunction(env, callback))) {
         return false;
     }
     if (GetNamedProperty(env, value, "onStat", callback) && !NapiDataUtils::IsUndefinedOrNull(env, callback)) {

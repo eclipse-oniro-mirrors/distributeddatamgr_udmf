@@ -312,8 +312,19 @@ void VirtualEntryProviderNapi::CallJs(napi_env env, napi_value callback, void *c
     napi_value provider = nullptr;
     napi_value function = nullptr;
     const char *name = GetCallbackName(request->operation);
-    if (napi_get_reference_value(env, tsfnContext->providerRef, &provider) != napi_ok ||
-        !GetFunction(env, provider, name, function)) {
+    if (napi_get_reference_value(env, tsfnContext->providerRef, &provider) != napi_ok) {
+        LOG_ERROR(UDMF_KITS_NAPI, "Get virtual entry provider reference failed, operation=%{public}u",
+            static_cast<uint32_t>(request->operation));
+        FailRequest(request, -EIO);
+        return;
+    }
+    if (request->operation == Operation::CANCEL &&
+        napi_get_named_property(env, provider, name, &function) == napi_ok &&
+        NapiDataUtils::IsUndefinedOrNull(env, function)) {
+        FailRequest(request, 0);
+        return;
+    }
+    if (!GetFunction(env, provider, name, function)) {
         LOG_ERROR(UDMF_KITS_NAPI, "Get virtual entry callback failed, operation=%{public}u",
             static_cast<uint32_t>(request->operation));
         int32_t status = request->operation == Operation::STAT ? -ENOSYS : -EIO;

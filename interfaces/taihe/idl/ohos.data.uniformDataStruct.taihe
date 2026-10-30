@@ -51,7 +51,7 @@ export interface VirtualFileInfo {
   itemInfo: VirtualItemType;
   onStat?: VirtualFileOnStat;
   onRead: VirtualFileOnRead;
-  onCancel: VirtualFileOnCancel;
+  onCancel?: VirtualFileOnCancel;
 }
 """)
 

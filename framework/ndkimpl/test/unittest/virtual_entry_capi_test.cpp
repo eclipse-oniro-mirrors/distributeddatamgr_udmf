@@ -320,11 +320,29 @@ HWTEST_F(VirtualEntryCapiTest, CreateInfo_InvalidCallbacks_DoNotAcquireContext, 
     callbacks = callbacks_;
     callbacks.onRead = nullptr;
     EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
-    callbacks = callbacks_;
-    callbacks.onCancel = nullptr;
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
     EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context_, nullptr), nullptr);
     EXPECT_EQ(context_.finalized, 0u);
+}
+
+/**
+ * @tc.name: CreateInfo_MissingCancel_ReadAndCancelSucceed
+ * @tc.desc: An omitted cancellation callback does not prevent reading and cancellation is a no-op.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, CreateInfo_MissingCancel_ReadAndCancelSucceed, TestSize.Level0)
+{
+    callbacks_.onCancel = nullptr;
+    InfoPtr info(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context_, OnFinalize),
+        OH_UdmfVirtualFileInfo_Destroy);
+    ASSERT_NE(info, nullptr);
+    auto provider = CreateNdkVirtualEntryProvider(info->info_);
+    ASSERT_NE(provider, nullptr);
+    std::vector<uint8_t> bytes;
+    EXPECT_EQ(provider->Read("file-id", 0, 7, bytes), 0);
+    EXPECT_EQ(bytes, context_.content);
+    EXPECT_EQ(provider->Cancel({ "file-id" }), 0);
+    EXPECT_EQ(context_.cancelCalls, 0u);
 }
 
 /**

@@ -176,8 +176,7 @@ public:
         if (ids.empty()) {
             return 0;
         }
-        if (ids.size() > MAX_VIRTUAL_ENTRY_COUNT || info_ == nullptr || info_->callbacks == nullptr ||
-            info_->callbacks->callbacks_.onCancel == nullptr) {
+        if (ids.size() > MAX_VIRTUAL_ENTRY_COUNT || info_ == nullptr || info_->callbacks == nullptr) {
             return -EINVAL;
         }
         std::vector<const char *> idList;
@@ -187,6 +186,9 @@ public:
                 return -EINVAL;
             }
             idList.emplace_back(id.c_str());
+        }
+        if (info_->callbacks->callbacks_.onCancel == nullptr) {
+            return 0;
         }
         int status = info_->callbacks->callbacks_.onCancel(
             info_->callbacks->context_, idList.data(), static_cast<uint32_t>(idList.size()));
@@ -407,7 +409,7 @@ OH_UdmfVirtualFileInfo *OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem *
 {
     if (!IsValidVirtualItem(itemInfo) || callbacks == nullptr ||
         callbacks->structSize < sizeof(OH_UdmfVirtualFileCallbacks) || callbacks->onRead == nullptr ||
-        callbacks->onCancel == nullptr || (context != nullptr && finalize == nullptr)) {
+        (context != nullptr && finalize == nullptr)) {
         return nullptr;
     }
     std::lock_guard<std::mutex> lock(itemInfo->mutex);

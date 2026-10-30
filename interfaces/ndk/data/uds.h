@@ -211,8 +211,9 @@ typedef void (*OH_UdmfVirtualFile_Finalize)(void* context);
 /**
  * @brief Describes callbacks used to provide virtual file metadata and content.
  *
- * Set <code>structSize</code> to <code>sizeof(OH_UdmfVirtualFileCallbacks)</code>. <code>onRead</code> and
- * <code>onCancel</code> are required. <code>onStat</code> is optional; every file must already declare its size.
+ * Set <code>structSize</code> to <code>sizeof(OH_UdmfVirtualFileCallbacks)</code>. <code>onRead</code> is required.
+ * <code>onStat</code> and <code>onCancel</code> are optional; every file must already declare its size.
+ * Set <code>onCancel</code> to nullptr if no cancellation notification is needed.
  * Callbacks can be invoked concurrently on different threads and must not block indefinitely.
  *
  * @since 26.1.0
@@ -224,7 +225,7 @@ typedef struct OH_UdmfVirtualFileCallbacks {
     OH_UdmfVirtualFile_OnStat onStat;
     /** Required content callback. */
     OH_UdmfVirtualFile_OnRead onRead;
-    /** Required cancellation callback. */
+    /** Optional cancellation callback. If nullptr, cancellation succeeds without notifying the provider. */
     OH_UdmfVirtualFile_OnCancel onCancel;
 } OH_UdmfVirtualFileCallbacks;
 
