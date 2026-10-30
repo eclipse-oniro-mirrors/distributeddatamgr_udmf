@@ -118,21 +118,21 @@ typedef struct OH_UdsFileUri OH_UdsFileUri;
  *
  * @since 26.1.0
  */
-typedef struct OH_UdmfVirtualItem OH_UdmfVirtualItem;
+typedef struct OH_UDMF_VirtualItem OH_UDMF_VirtualItem;
 
 /**
  * @brief Describes a virtual file entry and its data callbacks.
  *
  * @since 26.1.0
  */
-typedef struct OH_UdmfVirtualFileInfo OH_UdmfVirtualFileInfo;
+typedef struct OH_UDMF_VirtualFileInfo OH_UDMF_VirtualFileInfo;
 
 /**
  * @brief Describes the type of a virtual item.
  *
  * @since 26.1.0
  */
-typedef enum OH_UdmfVirtualItemType {
+typedef enum OH_UDMF_VirtualItemType {
     /**
      * @brief Virtual file.
      *
@@ -145,20 +145,20 @@ typedef enum OH_UdmfVirtualItemType {
      * @since 26.1.0
      */
     OH_UDMF_VIRTUAL_ITEM_DIRECTORY = 1,
-} OH_UdmfVirtualItemType;
+} OH_UDMF_VirtualItemType;
 
 /**
  * @brief Called when metadata for a virtual file is required.
  *
- * The returned item must be created by {@link OH_UdmfVirtualItem_CreateFile}. Ownership of the returned item is
+ * The returned item must be created by {@link OH_UDMF_CreateVirtualFileItem}. Ownership of the returned item is
  * transferred to UDMF. The callback must not destroy it after returning.
  *
- * @param context User context passed to {@link OH_UdmfVirtualFileInfo_Create}.
+ * @param context User context passed to {@link OH_UDMF_CreateVirtualFileInfo}.
  * @param id Identifier of the requested virtual file.
  * @return Returns a virtual file item on success, or nullptr on failure.
  * @since 26.1.0
  */
-typedef OH_UdmfVirtualItem* (*OH_UdmfVirtualFile_OnStat)(void* context, const char* id);
+typedef OH_UDMF_VirtualItem* (*OH_UDMF_VirtualFileOnStat)(void* context, const char* id);
 
 /**
  * @brief Called when data for a virtual file is required.
@@ -166,7 +166,7 @@ typedef OH_UdmfVirtualItem* (*OH_UdmfVirtualFile_OnStat)(void* context, const ch
  * The callback writes at most <code>length</code> bytes to <code>data</code> and writes the actual byte count to
  * <code>bytesRead</code>. A byte count smaller than <code>length</code>, including zero, is valid.
  *
- * @param context User context passed to {@link OH_UdmfVirtualFileInfo_Create}.
+ * @param context User context passed to {@link OH_UDMF_CreateVirtualFileInfo}.
  * @param id Identifier of the requested virtual file.
  * @param offset Read offset in bytes.
  * @param length Maximum number of bytes to read.
@@ -179,13 +179,13 @@ typedef OH_UdmfVirtualItem* (*OH_UdmfVirtualFile_OnStat)(void* context, const ch
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-typedef int (*OH_UdmfVirtualFile_OnRead)(void* context, const char* id, int64_t offset, uint32_t length,
+typedef int (*OH_UDMF_VirtualFileOnRead)(void* context, const char* id, int64_t offset, uint32_t length,
     uint8_t* data, uint32_t* bytesRead);
 
 /**
  * @brief Called when virtual file operations are cancelled.
  *
- * @param context User context passed to {@link OH_UdmfVirtualFileInfo_Create}.
+ * @param context User context passed to {@link OH_UDMF_CreateVirtualFileInfo}.
  * @param idList Identifiers of the cancelled virtual files. The array and strings are valid only during the callback.
  * @param count Number of identifiers in <code>idList</code>.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
@@ -195,7 +195,7 @@ typedef int (*OH_UdmfVirtualFile_OnRead)(void* context, const char* id, int64_t 
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-typedef int (*OH_UdmfVirtualFile_OnCancel)(void* context, const char* const *idList, uint32_t count);
+typedef int (*OH_UDMF_VirtualFileOnCancel)(void* context, const char* const *idList, uint32_t count);
 
 /**
  * @brief Releases a user context retained by UDMF.
@@ -206,28 +206,28 @@ typedef int (*OH_UdmfVirtualFile_OnCancel)(void* context, const char* const *idL
  * @param context User context to release.
  * @since 26.1.0
  */
-typedef void (*OH_UdmfVirtualFile_Finalize)(void* context);
+typedef void (*OH_UDMF_VirtualFileFinalize)(void* context);
 
 /**
  * @brief Describes callbacks used to provide virtual file metadata and content.
  *
- * Set <code>structSize</code> to <code>sizeof(OH_UdmfVirtualFileCallbacks)</code>. <code>onRead</code> is required.
+ * Set <code>structSize</code> to <code>sizeof(OH_UDMF_VirtualFileCallbacks)</code>. <code>onRead</code> is required.
  * <code>onStat</code> and <code>onCancel</code> are optional; every file must already declare its size.
  * Set <code>onCancel</code> to nullptr if no cancellation notification is needed.
  * Callbacks can be invoked concurrently on different threads and must not block indefinitely.
  *
  * @since 26.1.0
  */
-typedef struct OH_UdmfVirtualFileCallbacks {
+typedef struct OH_UDMF_VirtualFileCallbacks {
     /** Size of this structure. */
     uint32_t structSize;
     /** Optional metadata callback. */
-    OH_UdmfVirtualFile_OnStat onStat;
+    OH_UDMF_VirtualFileOnStat onStat;
     /** Required content callback. */
-    OH_UdmfVirtualFile_OnRead onRead;
+    OH_UDMF_VirtualFileOnRead onRead;
     /** Optional cancellation callback. If nullptr, cancellation succeeds without notifying the provider. */
-    OH_UdmfVirtualFile_OnCancel onCancel;
-} OH_UdmfVirtualFileCallbacks;
+    OH_UDMF_VirtualFileOnCancel onCancel;
+} OH_UDMF_VirtualFileCallbacks;
 
 /**
  * @brief Describes the unified data struct of open harmony pixel map.
@@ -890,7 +890,7 @@ int OH_UdsFileUri_SetAuthPolicy(OH_UdsFileUri* pThis, uint32_t authPolicy);
 /**
  * @brief Creates a virtual file item that requires an explicit file size.
  *
- * Call {@link OH_UdmfVirtualItem_SetFileSize} before adding the item to a directory or creating virtual file
+ * Call {@link OH_UDMF_SetVirtualFileSize} before adding the item to a directory or creating virtual file
  * information. A size of zero describes an empty file; it is never inferred from an unset size.
  *
  * @param name File name. It must not contain a path separator.
@@ -900,7 +900,7 @@ int OH_UdsFileUri_SetAuthPolicy(OH_UdsFileUri* pThis, uint32_t authPolicy);
  *     fails.
  * @since 26.1.0
  */
-OH_UdmfVirtualItem* OH_UdmfVirtualItem_CreateFile(const char* name, const char* id, int64_t modifyTime);
+OH_UDMF_VirtualItem* OH_UDMF_CreateVirtualFileItem(const char* name, const char* id, int64_t modifyTime);
 
 /**
  * @brief Creates a virtual directory item.
@@ -911,7 +911,7 @@ OH_UdmfVirtualItem* OH_UdmfVirtualItem_CreateFile(const char* name, const char* 
  *     fails.
  * @since 26.1.0
  */
-OH_UdmfVirtualItem* OH_UdmfVirtualItem_CreateDirectory(const char* name, int64_t modifyTime);
+OH_UDMF_VirtualItem* OH_UDMF_CreateVirtualDirectoryItem(const char* name, int64_t modifyTime);
 
 /**
  * @brief Destroys a virtual item.
@@ -919,7 +919,7 @@ OH_UdmfVirtualItem* OH_UdmfVirtualItem_CreateDirectory(const char* name, int64_t
  * @param item Virtual item to destroy.
  * @since 26.1.0
  */
-void OH_UdmfVirtualItem_Destroy(OH_UdmfVirtualItem* item);
+void OH_UDMF_DestroyVirtualItem(OH_UDMF_VirtualItem* item);
 
 /**
  * @brief Sets the size of a virtual file item.
@@ -933,13 +933,13 @@ void OH_UdmfVirtualItem_Destroy(OH_UdmfVirtualItem* item);
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-int OH_UdmfVirtualItem_SetFileSize(OH_UdmfVirtualItem* item, int64_t size);
+int OH_UDMF_SetVirtualFileSize(OH_UDMF_VirtualItem* item, int64_t size);
 
 /**
  * @brief Resets the required size of a virtual file item during construction.
  *
  * The item cannot be added to a directory or used to create virtual file information until
- * {@link OH_UdmfVirtualItem_SetFileSize} sets a non-negative size again. A stat callback does not replace this step.
+ * {@link OH_UDMF_SetVirtualFileSize} sets a non-negative size again. A stat callback does not replace this step.
  *
  * @param item Virtual file item.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
@@ -948,7 +948,7 @@ int OH_UdmfVirtualItem_SetFileSize(OH_UdmfVirtualItem* item, int64_t size);
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-int OH_UdmfVirtualItem_ClearFileSize(OH_UdmfVirtualItem* item);
+int OH_UDMF_ClearVirtualFileSize(OH_UDMF_VirtualItem* item);
 
 /**
  * @brief Adds a child item to a virtual directory.
@@ -964,7 +964,7 @@ int OH_UdmfVirtualItem_ClearFileSize(OH_UdmfVirtualItem* item);
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-int OH_UdmfVirtualItem_AddChild(OH_UdmfVirtualItem* directory, const OH_UdmfVirtualItem* child);
+int OH_UDMF_AddVirtualItemChild(OH_UDMF_VirtualItem* directory, const OH_UDMF_VirtualItem* child);
 
 /**
  * @brief Creates virtual file information.
@@ -980,8 +980,8 @@ int OH_UdmfVirtualItem_AddChild(OH_UdmfVirtualItem* directory, const OH_UdmfVirt
  *     or memory allocation fails.
  * @since 26.1.0
  */
-OH_UdmfVirtualFileInfo* OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem* itemInfo,
-    const OH_UdmfVirtualFileCallbacks* callbacks, void* context, OH_UdmfVirtualFile_Finalize finalize);
+OH_UDMF_VirtualFileInfo* OH_UDMF_CreateVirtualFileInfo(const OH_UDMF_VirtualItem* itemInfo,
+    const OH_UDMF_VirtualFileCallbacks* callbacks, void* context, OH_UDMF_VirtualFileFinalize finalize);
 
 /**
  * @brief Destroys virtual file information.
@@ -991,7 +991,7 @@ OH_UdmfVirtualFileInfo* OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem* 
  * @param info Virtual file information to destroy.
  * @since 26.1.0
  */
-void OH_UdmfVirtualFileInfo_Destroy(OH_UdmfVirtualFileInfo* info);
+void OH_UDMF_DestroyVirtualFileInfo(OH_UDMF_VirtualFileInfo* info);
 
 /**
  * @brief Attaches virtual file information to a file URI.
@@ -1004,7 +1004,7 @@ void OH_UdmfVirtualFileInfo_Destroy(OH_UdmfVirtualFileInfo* info);
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-int OH_UdsFileUri_SetVirtualEntry(OH_UdsFileUri* fileUri, const OH_UdmfVirtualFileInfo* info);
+int OH_UDMF_SetFileUriVirtualEntry(OH_UdsFileUri* fileUri, const OH_UDMF_VirtualFileInfo* info);
 
 /**
  * @brief Removes virtual file information from a file URI.
@@ -1016,7 +1016,7 @@ int OH_UdsFileUri_SetVirtualEntry(OH_UdsFileUri* fileUri, const OH_UdmfVirtualFi
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-int OH_UdsFileUri_ClearVirtualEntry(OH_UdsFileUri* fileUri);
+int OH_UDMF_ClearFileUriVirtualEntry(OH_UdsFileUri* fileUri);
 
 /**
  * @brief Creation a pointer to the instance of the {@link OH_UdsPixelMap}.

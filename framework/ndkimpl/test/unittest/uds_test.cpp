@@ -1639,57 +1639,57 @@ HWTEST_F(UdsTest, OH_UdsPixelMap_SetDetails_001, TestSize.Level1)
 }
 
 /**
- * @tc.name: OH_UdmfVirtualItem_Create_001
+ * @tc.name: OH_UDMF_VirtualItem_Create_001
  * @tc.desc: Create a virtual directory tree and validate item constraints
  * @tc.type: FUNC
  */
-HWTEST_F(UdsTest, OH_UdmfVirtualItem_Create_001, TestSize.Level1)
+HWTEST_F(UdsTest, OH_UDMF_VirtualItem_Create_001, TestSize.Level1)
 {
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateFile("bad/name", "file-id", 0), nullptr);
-    auto file = OH_UdmfVirtualItem_CreateFile("example.bin", "file-id", 100);
-    auto directory = OH_UdmfVirtualItem_CreateDirectory("folder", 100);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileItem("bad/name", "file-id", 0), nullptr);
+    auto file = OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", 100);
+    auto directory = OH_UDMF_CreateVirtualDirectoryItem("folder", 100);
     ASSERT_NE(file, nullptr);
     ASSERT_NE(directory, nullptr);
 
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(file, 1024), UDMF_E_OK);
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(directory, 1024), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(file, directory), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(directory, file), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(file, 1024), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(directory, 1024), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(file, directory), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(directory, file), UDMF_E_OK);
 
-    OH_UdmfVirtualItem_Destroy(file);
-    OH_UdmfVirtualItem_Destroy(directory);
+    OH_UDMF_DestroyVirtualItem(file);
+    OH_UDMF_DestroyVirtualItem(directory);
 }
 
 /**
- * @tc.name: OH_UdmfVirtualFileInfo_Create_001
+ * @tc.name: OH_UDMF_CreateVirtualFileInfo_001
  * @tc.desc: Validate callback requirements and retained context lifetime
  * @tc.type: FUNC
  */
-HWTEST_F(UdsTest, OH_UdmfVirtualFileInfo_Create_001, TestSize.Level1)
+HWTEST_F(UdsTest, OH_UDMF_CreateVirtualFileInfo_001, TestSize.Level1)
 {
-    auto file = OH_UdmfVirtualItem_CreateFile("example.bin", "file-id", 100);
+    auto file = OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", 100);
     ASSERT_NE(file, nullptr);
-    OH_UdmfVirtualFileCallbacks callbacks{};
-    callbacks.structSize = sizeof(OH_UdmfVirtualFileCallbacks);
+    OH_UDMF_VirtualFileCallbacks callbacks{};
+    callbacks.structSize = sizeof(OH_UDMF_VirtualFileCallbacks);
     callbacks.onRead = ReadVirtualFile;
     callbacks.onCancel = CancelVirtualFile;
     VirtualCallbackContext context;
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(file, &callbacks, &context, FinalizeVirtualFile), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(file, &callbacks, &context, FinalizeVirtualFile), nullptr);
     EXPECT_EQ(context.finalizeCount, 0);
 
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(file, 1024), UDMF_E_OK);
-    auto info = OH_UdmfVirtualFileInfo_Create(file, &callbacks, &context, FinalizeVirtualFile);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(file, 1024), UDMF_E_OK);
+    auto info = OH_UDMF_CreateVirtualFileInfo(file, &callbacks, &context, FinalizeVirtualFile);
     auto fileUri = OH_UdsFileUri_Create();
     ASSERT_NE(info, nullptr);
     ASSERT_NE(fileUri, nullptr);
-    EXPECT_EQ(OH_UdsFileUri_SetVirtualEntry(fileUri, info), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_SetFileUriVirtualEntry(fileUri, info), UDMF_E_OK);
 
-    OH_UdmfVirtualFileInfo_Destroy(info);
+    OH_UDMF_DestroyVirtualFileInfo(info);
     EXPECT_EQ(context.finalizeCount, 0);
-    EXPECT_EQ(OH_UdsFileUri_ClearVirtualEntry(fileUri), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_ClearFileUriVirtualEntry(fileUri), UDMF_E_OK);
     EXPECT_EQ(context.finalizeCount, 1);
 
     OH_UdsFileUri_Destroy(fileUri);
-    OH_UdmfVirtualItem_Destroy(file);
+    OH_UDMF_DestroyVirtualItem(file);
 }
 } // namespace OHOS::Test

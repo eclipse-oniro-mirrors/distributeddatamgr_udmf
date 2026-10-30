@@ -37,8 +37,8 @@ using namespace testing::ext;
 
 namespace OHOS::UDMF {
 namespace {
-using ItemPtr = std::unique_ptr<OH_UdmfVirtualItem, decltype(&OH_UdmfVirtualItem_Destroy)>;
-using InfoPtr = std::unique_ptr<OH_UdmfVirtualFileInfo, decltype(&OH_UdmfVirtualFileInfo_Destroy)>;
+using ItemPtr = std::unique_ptr<OH_UDMF_VirtualItem, decltype(&OH_UDMF_DestroyVirtualItem)>;
+using InfoPtr = std::unique_ptr<OH_UDMF_VirtualFileInfo, decltype(&OH_UDMF_DestroyVirtualFileInfo)>;
 using UriPtr = std::unique_ptr<OH_UdsFileUri, decltype(&OH_UdsFileUri_Destroy)>;
 
 struct CallbackContext {
@@ -59,18 +59,18 @@ struct CallbackContext {
     std::condition_variable condition;
 };
 
-OH_UdmfVirtualItem *OnStat(void *value, const char *id)
+OH_UDMF_VirtualItem *OnStat(void *value, const char *id)
 {
     auto &context = *static_cast<CallbackContext *>(value);
     if (context.statMode == 1) {
         return nullptr;
     }
     if (context.statMode == 2) {
-        return OH_UdmfVirtualItem_CreateDirectory("directory", 123);
+        return OH_UDMF_CreateVirtualDirectoryItem("directory", 123);
     }
-    auto item = OH_UdmfVirtualItem_CreateFile("example.bin", id, 123);
+    auto item = OH_UDMF_CreateVirtualFileItem("example.bin", id, 123);
     if (item != nullptr && context.statMode != 3) {
-        (void)OH_UdmfVirtualItem_SetFileSize(item, static_cast<int64_t>(context.content.size()));
+        (void)OH_UDMF_SetVirtualFileSize(item, static_cast<int64_t>(context.content.size()));
     }
     return item;
 }
@@ -113,9 +113,9 @@ void OnFinalize(void *value)
     ++static_cast<CallbackContext *>(value)->finalized;
 }
 
-OH_UdmfVirtualFileCallbacks MakeCallbacks()
+OH_UDMF_VirtualFileCallbacks MakeCallbacks()
 {
-    OH_UdmfVirtualFileCallbacks callbacks{};
+    OH_UDMF_VirtualFileCallbacks callbacks{};
     callbacks.structSize = sizeof(callbacks);
     callbacks.onStat = OnStat;
     callbacks.onRead = OnRead;
@@ -136,9 +136,9 @@ public:
     void SetUp() override
     {
         callbacks_ = MakeCallbacks();
-        item_.reset(OH_UdmfVirtualItem_CreateFile("example.bin", "file-id", 123));
-        if (OH_UdmfVirtualItem_SetFileSize(item_.get(), 7) == UDMF_E_OK) {
-            info_.reset(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context_, OnFinalize));
+        item_.reset(OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", 123));
+        if (OH_UDMF_SetVirtualFileSize(item_.get(), 7) == UDMF_E_OK) {
+            info_.reset(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &context_, OnFinalize));
         }
         if (info_ != nullptr) {
             provider_ = CreateNdkVirtualEntryProvider(info_->info_);
@@ -147,9 +147,9 @@ public:
 
 protected:
     CallbackContext context_;
-    OH_UdmfVirtualFileCallbacks callbacks_{};
-    ItemPtr item_{ nullptr, OH_UdmfVirtualItem_Destroy };
-    InfoPtr info_{ nullptr, OH_UdmfVirtualFileInfo_Destroy };
+    OH_UDMF_VirtualFileCallbacks callbacks_{};
+    ItemPtr item_{ nullptr, OH_UDMF_DestroyVirtualItem };
+    InfoPtr info_{ nullptr, OH_UDMF_DestroyVirtualFileInfo };
     sptr<IVirtualEntryProvider> provider_;
 };
 
@@ -161,18 +161,18 @@ protected:
  */
 HWTEST_F(VirtualEntryCapiTest, CreateFile_InvalidNamesAndIds_RejectInput, TestSize.Level0)
 {
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateFile(nullptr, "id", 0), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateFile("file", nullptr, 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileItem(nullptr, "id", 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileItem("file", nullptr, 0), nullptr);
     for (const char *name : { "", ".", "..", "a/b", "a\\b" }) {
         SCOPED_TRACE(name);
-        EXPECT_EQ(OH_UdmfVirtualItem_CreateFile(name, "id", 0), nullptr);
-        EXPECT_EQ(OH_UdmfVirtualItem_CreateDirectory(name, 0), nullptr);
+        EXPECT_EQ(OH_UDMF_CreateVirtualFileItem(name, "id", 0), nullptr);
+        EXPECT_EQ(OH_UDMF_CreateVirtualDirectoryItem(name, 0), nullptr);
     }
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateDirectory(nullptr, 0), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateFile(std::string(256, 'a').c_str(), "id", 0), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateDirectory(std::string(256, 'a').c_str(), 0), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateFile("file", "", 0), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_CreateFile("file", std::string(1025, 'i').c_str(), 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualDirectoryItem(nullptr, 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileItem(std::string(256, 'a').c_str(), "id", 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualDirectoryItem(std::string(256, 'a').c_str(), 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileItem("file", "", 0), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileItem("file", std::string(1025, 'i').c_str(), 0), nullptr);
 }
 
 /**
@@ -183,10 +183,10 @@ HWTEST_F(VirtualEntryCapiTest, CreateFile_InvalidNamesAndIds_RejectInput, TestSi
  */
 HWTEST_F(VirtualEntryCapiTest, CreateFile_MaximumLengths_AcceptBoundary, TestSize.Level0)
 {
-    ItemPtr file(OH_UdmfVirtualItem_CreateFile(std::string(255, 'a').c_str(),
-        std::string(1024, 'i').c_str(), std::numeric_limits<int64_t>::max()), OH_UdmfVirtualItem_Destroy);
-    ItemPtr directory(OH_UdmfVirtualItem_CreateDirectory(std::string(255, 'd').c_str(), 0),
-        OH_UdmfVirtualItem_Destroy);
+    ItemPtr file(OH_UDMF_CreateVirtualFileItem(std::string(255, 'a').c_str(),
+        std::string(1024, 'i').c_str(), std::numeric_limits<int64_t>::max()), OH_UDMF_DestroyVirtualItem);
+    ItemPtr directory(OH_UDMF_CreateVirtualDirectoryItem(std::string(255, 'd').c_str(), 0),
+        OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(file, nullptr);
     EXPECT_EQ(file->entry_.id.size(), 1024u);
     EXPECT_EQ(file->entry_.name.size(), 255u);
@@ -202,17 +202,17 @@ HWTEST_F(VirtualEntryCapiTest, CreateFile_MaximumLengths_AcceptBoundary, TestSiz
 HWTEST_F(VirtualEntryCapiTest, Mutators_NullOrWrongKind_RejectSafely, TestSize.Level0)
 {
     ASSERT_NE(item_, nullptr);
-    ItemPtr directory(OH_UdmfVirtualItem_CreateDirectory("dir", 0), OH_UdmfVirtualItem_Destroy);
+    ItemPtr directory(OH_UDMF_CreateVirtualDirectoryItem("dir", 0), OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(directory, nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(nullptr, 0), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_ClearFileSize(nullptr), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(nullptr, item_.get()), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(directory.get(), nullptr), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(directory.get(), directory.get()), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(item_.get(), directory.get()), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(directory.get(), 0), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_ClearFileSize(directory.get()), UDMF_E_INVALID_PARAM);
-    OH_UdmfVirtualItem_Destroy(nullptr);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(nullptr, 0), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_ClearVirtualFileSize(nullptr), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(nullptr, item_.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), nullptr), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), directory.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(item_.get(), directory.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(directory.get(), 0), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_ClearVirtualFileSize(directory.get()), UDMF_E_INVALID_PARAM);
+    OH_UDMF_DestroyVirtualItem(nullptr);
     EXPECT_TRUE(directory->entry_.subItems.empty());
 }
 
@@ -225,12 +225,12 @@ HWTEST_F(VirtualEntryCapiTest, Mutators_NullOrWrongKind_RejectSafely, TestSize.L
 HWTEST_F(VirtualEntryCapiTest, SetAndClearFileSize_Boundaries_PreserveMetadata, TestSize.Level0)
 {
     ASSERT_NE(item_, nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), -1), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), 0), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), -1), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 0), UDMF_E_OK);
     EXPECT_EQ(item_->entry_.size, 0);
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), std::numeric_limits<int64_t>::max()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), std::numeric_limits<int64_t>::max()), UDMF_E_OK);
     EXPECT_EQ(item_->entry_.size, std::numeric_limits<int64_t>::max());
-    EXPECT_EQ(OH_UdmfVirtualItem_ClearFileSize(item_.get()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_ClearVirtualFileSize(item_.get()), UDMF_E_OK);
     EXPECT_EQ(item_->entry_.size, -1);
     EXPECT_EQ(item_->entry_.name, "example.bin");
     EXPECT_EQ(item_->entry_.modifyTime, 123);
@@ -244,12 +244,12 @@ HWTEST_F(VirtualEntryCapiTest, SetAndClearFileSize_Boundaries_PreserveMetadata, 
  */
 HWTEST_F(VirtualEntryCapiTest, AddChild_DeepCopy_KeepSnapshotAfterSourceChanges, TestSize.Level0)
 {
-    ItemPtr directory(OH_UdmfVirtualItem_CreateDirectory("dir", 0), OH_UdmfVirtualItem_Destroy);
+    ItemPtr directory(OH_UDMF_CreateVirtualDirectoryItem("dir", 0), OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(directory, nullptr);
     ASSERT_NE(item_, nullptr);
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), 7), UDMF_E_OK);
-    ASSERT_EQ(OH_UdmfVirtualItem_AddChild(directory.get(), item_.get()), UDMF_E_OK);
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), 99), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 7), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), item_.get()), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 99), UDMF_E_OK);
     item_.reset();
     ASSERT_EQ(directory->entry_.subItems.size(), 1u);
     EXPECT_EQ(directory->entry_.subItems.front().size, 7);
@@ -264,18 +264,18 @@ HWTEST_F(VirtualEntryCapiTest, AddChild_DeepCopy_KeepSnapshotAfterSourceChanges,
  */
 HWTEST_F(VirtualEntryCapiTest, AddChild_MaximumDepth_RejectWithoutPartialMutation, TestSize.Level0)
 {
-    ItemPtr tree(OH_UdmfVirtualItem_CreateFile("leaf", "id", 0), OH_UdmfVirtualItem_Destroy);
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(tree.get(), 0), UDMF_E_OK);
+    ItemPtr tree(OH_UDMF_CreateVirtualFileItem("leaf", "id", 0), OH_UDMF_DestroyVirtualItem);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(tree.get(), 0), UDMF_E_OK);
     ASSERT_NE(tree, nullptr);
     for (size_t depth = 0; depth < 64; ++depth) {
-        ItemPtr parent(OH_UdmfVirtualItem_CreateDirectory("dir", 0), OH_UdmfVirtualItem_Destroy);
+        ItemPtr parent(OH_UDMF_CreateVirtualDirectoryItem("dir", 0), OH_UDMF_DestroyVirtualItem);
         ASSERT_NE(parent, nullptr);
-        ASSERT_EQ(OH_UdmfVirtualItem_AddChild(parent.get(), tree.get()), UDMF_E_OK);
+        ASSERT_EQ(OH_UDMF_AddVirtualItemChild(parent.get(), tree.get()), UDMF_E_OK);
         tree = std::move(parent);
     }
-    ItemPtr overflow(OH_UdmfVirtualItem_CreateDirectory("overflow", 0), OH_UdmfVirtualItem_Destroy);
+    ItemPtr overflow(OH_UDMF_CreateVirtualDirectoryItem("overflow", 0), OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(overflow, nullptr);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(overflow.get(), tree.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(overflow.get(), tree.get()), UDMF_E_INVALID_PARAM);
     EXPECT_TRUE(overflow->entry_.subItems.empty());
 }
 
@@ -287,7 +287,7 @@ HWTEST_F(VirtualEntryCapiTest, AddChild_MaximumDepth_RejectWithoutPartialMutatio
  */
 HWTEST_F(VirtualEntryCapiTest, AddChild_NodeQuota_IncludeRootInLimit, TestSize.Level1)
 {
-    ItemPtr directory(OH_UdmfVirtualItem_CreateDirectory("dir", 0), OH_UdmfVirtualItem_Destroy);
+    ItemPtr directory(OH_UDMF_CreateVirtualDirectoryItem("dir", 0), OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(directory, nullptr);
     // Prepare a valid boundary tree without quadratic copying through 4095 insertions.
     for (size_t index = 0; index < 4094; ++index) {
@@ -297,9 +297,9 @@ HWTEST_F(VirtualEntryCapiTest, AddChild_NodeQuota_IncludeRootInLimit, TestSize.L
         child.size = 0;
         directory->entry_.subItems.push_back(std::move(child));
     }
-    ASSERT_EQ(OH_UdmfVirtualItem_AddChild(directory.get(), item_.get()), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), item_.get()), UDMF_E_OK);
     EXPECT_EQ(directory->entry_.subItems.size(), 4095u);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(directory.get(), item_.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), item_.get()), UDMF_E_INVALID_PARAM);
     EXPECT_EQ(directory->entry_.subItems.size(), 4095u);
 }
 
@@ -312,15 +312,15 @@ HWTEST_F(VirtualEntryCapiTest, AddChild_NodeQuota_IncludeRootInLimit, TestSize.L
 HWTEST_F(VirtualEntryCapiTest, CreateInfo_InvalidCallbacks_DoNotAcquireContext, TestSize.Level0)
 {
     ASSERT_NE(item_, nullptr);
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(nullptr, &callbacks_, &context_, OnFinalize), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), nullptr, &context_, OnFinalize), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(nullptr, &callbacks_, &context_, OnFinalize), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(item_.get(), nullptr, &context_, OnFinalize), nullptr);
     auto callbacks = callbacks_;
     callbacks.structSize = sizeof(callbacks) - 1;
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
     callbacks = callbacks_;
     callbacks.onRead = nullptr;
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context_, nullptr), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &context_, nullptr), nullptr);
     EXPECT_EQ(context_.finalized, 0u);
 }
 
@@ -333,8 +333,8 @@ HWTEST_F(VirtualEntryCapiTest, CreateInfo_InvalidCallbacks_DoNotAcquireContext, 
 HWTEST_F(VirtualEntryCapiTest, CreateInfo_MissingCancel_ReadAndCancelSucceed, TestSize.Level0)
 {
     callbacks_.onCancel = nullptr;
-    InfoPtr info(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context_, OnFinalize),
-        OH_UdmfVirtualFileInfo_Destroy);
+    InfoPtr info(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &context_, OnFinalize),
+        OH_UDMF_DestroyVirtualFileInfo);
     ASSERT_NE(info, nullptr);
     auto provider = CreateNdkVirtualEntryProvider(info->info_);
     ASSERT_NE(provider, nullptr);
@@ -354,15 +354,15 @@ HWTEST_F(VirtualEntryCapiTest, CreateInfo_MissingCancel_ReadAndCancelSucceed, Te
 HWTEST_F(VirtualEntryCapiTest, CreateInfo_MissingSize_RejectEvenWithStat, TestSize.Level0)
 {
     ASSERT_NE(item_, nullptr);
-    ASSERT_EQ(OH_UdmfVirtualItem_ClearFileSize(item_.get()), UDMF_E_OK);
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context_, OnFinalize), nullptr);
+    ASSERT_EQ(OH_UDMF_ClearVirtualFileSize(item_.get()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &context_, OnFinalize), nullptr);
     auto callbacks = callbacks_;
     callbacks.onStat = nullptr;
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks, &context_, OnFinalize), nullptr);
     EXPECT_EQ(context_.finalized, 0u);
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), 0), UDMF_E_OK);
-    InfoPtr known(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, &context_, OnFinalize),
-        OH_UdmfVirtualFileInfo_Destroy);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 0), UDMF_E_OK);
+    InfoPtr known(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks, &context_, OnFinalize),
+        OH_UDMF_DestroyVirtualFileInfo);
     EXPECT_NE(known, nullptr);
 }
 
@@ -374,13 +374,13 @@ HWTEST_F(VirtualEntryCapiTest, CreateInfo_MissingSize_RejectEvenWithStat, TestSi
  */
 HWTEST_F(VirtualEntryCapiTest, CreateInfo_NestedMissingSize_RejectEveryDescendant, TestSize.Level0)
 {
-    ItemPtr directory(OH_UdmfVirtualItem_CreateDirectory("dir", 0), OH_UdmfVirtualItem_Destroy);
+    ItemPtr directory(OH_UDMF_CreateVirtualDirectoryItem("dir", 0), OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(directory, nullptr);
-    ASSERT_EQ(OH_UdmfVirtualItem_ClearFileSize(item_.get()), UDMF_E_OK);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(directory.get(), item_.get()), UDMF_E_INVALID_PARAM);
+    ASSERT_EQ(OH_UDMF_ClearVirtualFileSize(item_.get()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), item_.get()), UDMF_E_INVALID_PARAM);
     EXPECT_TRUE(directory->entry_.subItems.empty());
     directory->entry_.subItems.push_back(item_->entry_);
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(directory.get(), &callbacks_, &context_, OnFinalize), nullptr);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(directory.get(), &callbacks_, &context_, OnFinalize), nullptr);
     auto file = std::make_shared<File>();
     AttachmentOwner owner;
     EXPECT_FALSE(VirtualEntryAttachmentRegistry::Attach(file, directory->entry_, provider_->AsObject(), &owner));
@@ -397,12 +397,12 @@ HWTEST_F(VirtualEntryCapiTest, SetVirtualEntry_InvalidHandles_RejectInput, TestS
     UriPtr uri(OH_UdsFileUri_Create(), OH_UdsFileUri_Destroy);
     ASSERT_NE(uri, nullptr);
     ASSERT_NE(info_, nullptr);
-    EXPECT_EQ(OH_UdsFileUri_SetVirtualEntry(nullptr, info_.get()), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdsFileUri_SetVirtualEntry(uri.get(), nullptr), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdsFileUri_ClearVirtualEntry(nullptr), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdsFileUri_ClearVirtualEntry(uri.get()), UDMF_E_OK);
-    EXPECT_EQ(OH_UdsFileUri_ClearVirtualEntry(uri.get()), UDMF_E_OK);
-    OH_UdmfVirtualFileInfo_Destroy(nullptr);
+    EXPECT_EQ(OH_UDMF_SetFileUriVirtualEntry(nullptr, info_.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_SetFileUriVirtualEntry(uri.get(), nullptr), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_ClearFileUriVirtualEntry(nullptr), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_ClearFileUriVirtualEntry(uri.get()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_ClearFileUriVirtualEntry(uri.get()), UDMF_E_OK);
+    OH_UDMF_DestroyVirtualFileInfo(nullptr);
 }
 
 /**
@@ -414,22 +414,22 @@ HWTEST_F(VirtualEntryCapiTest, SetVirtualEntry_InvalidHandles_RejectInput, TestS
 HWTEST_F(VirtualEntryCapiTest, Finalize_MultipleUris_ReleaseExactlyOnceAfterLastOwner, TestSize.Level0)
 {
     CallbackContext context;
-    InfoPtr info(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &context, OnFinalize),
-        OH_UdmfVirtualFileInfo_Destroy);
+    InfoPtr info(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &context, OnFinalize),
+        OH_UDMF_DestroyVirtualFileInfo);
     UriPtr first(OH_UdsFileUri_Create(), OH_UdsFileUri_Destroy);
     UriPtr second(OH_UdsFileUri_Create(), OH_UdsFileUri_Destroy);
     ASSERT_NE(info, nullptr);
     ASSERT_NE(first, nullptr);
     ASSERT_NE(second, nullptr);
-    ASSERT_EQ(OH_UdsFileUri_SetVirtualEntry(first.get(), info.get()), UDMF_E_OK);
-    ASSERT_EQ(OH_UdsFileUri_SetVirtualEntry(second.get(), info.get()), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetFileUriVirtualEntry(first.get(), info.get()), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetFileUriVirtualEntry(second.get(), info.get()), UDMF_E_OK);
     info.reset();
     EXPECT_EQ(context.finalized, 0u);
-    EXPECT_EQ(OH_UdsFileUri_ClearVirtualEntry(first.get()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_ClearFileUriVirtualEntry(first.get()), UDMF_E_OK);
     EXPECT_EQ(context.finalized, 0u);
     second.reset();
     EXPECT_EQ(context.finalized, 1u);
-    EXPECT_EQ(OH_UdsFileUri_ClearVirtualEntry(first.get()), UDMF_E_OK);
+    EXPECT_EQ(OH_UDMF_ClearFileUriVirtualEntry(first.get()), UDMF_E_OK);
     EXPECT_EQ(context.finalized, 1u);
 }
 
@@ -644,12 +644,12 @@ HWTEST_F(VirtualEntryCapiTest, Read_ConcurrentCallbacks_RejectNinthAndRecoverQuo
  */
 HWTEST_F(VirtualEntryCapiTest, VirtualItem_InvalidStructId_RejectWithoutDestroyingHandle, TestSize.Level0)
 {
-    OH_UdmfVirtualItem invalid{ 0, {}, {} };
-    EXPECT_EQ(OH_UdmfVirtualItem_SetFileSize(&invalid, 0), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_ClearFileSize(&invalid), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualItem_AddChild(&invalid, item_.get()), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdmfVirtualFileInfo_Create(&invalid, &callbacks_, &context_, OnFinalize), nullptr);
-    OH_UdmfVirtualItem_Destroy(&invalid);
+    OH_UDMF_VirtualItem invalid{ 0, {}, {} };
+    EXPECT_EQ(OH_UDMF_SetVirtualFileSize(&invalid, 0), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_ClearVirtualFileSize(&invalid), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_AddVirtualItemChild(&invalid, item_.get()), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_CreateVirtualFileInfo(&invalid, &callbacks_, &context_, OnFinalize), nullptr);
+    OH_UDMF_DestroyVirtualItem(&invalid);
     EXPECT_EQ(invalid.entry_.size, -1);
 }
 
@@ -663,11 +663,11 @@ HWTEST_F(VirtualEntryCapiTest, VirtualInfo_InvalidStructIdOrEmptyState_RejectUri
 {
     UriPtr uri(OH_UdsFileUri_Create(), OH_UdsFileUri_Destroy);
     ASSERT_NE(uri, nullptr);
-    OH_UdmfVirtualFileInfo invalid{ 0, info_->info_ };
-    OH_UdmfVirtualFileInfo empty;
-    EXPECT_EQ(OH_UdsFileUri_SetVirtualEntry(uri.get(), &invalid), UDMF_E_INVALID_PARAM);
-    EXPECT_EQ(OH_UdsFileUri_SetVirtualEntry(uri.get(), &empty), UDMF_E_INVALID_PARAM);
-    OH_UdmfVirtualFileInfo_Destroy(&invalid);
+    OH_UDMF_VirtualFileInfo invalid{ 0, info_->info_ };
+    OH_UDMF_VirtualFileInfo empty;
+    EXPECT_EQ(OH_UDMF_SetFileUriVirtualEntry(uri.get(), &invalid), UDMF_E_INVALID_PARAM);
+    EXPECT_EQ(OH_UDMF_SetFileUriVirtualEntry(uri.get(), &empty), UDMF_E_INVALID_PARAM);
+    OH_UDMF_DestroyVirtualFileInfo(&invalid);
     EXPECT_EQ(context_.finalized, 0u);
 }
 
@@ -834,7 +834,7 @@ HWTEST_F(VirtualEntryCapiTest, SetData_OrdinaryRecordBeforeVirtualFile_StillReje
  */
 HWTEST_F(VirtualEntryCapiTest, CreateInfo_ContextlessKnownFile_AllowMissingStatAndFinalizer, TestSize.Level0)
 {
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(item_.get(), 0), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 0), UDMF_E_OK);
     auto callbacks = callbacks_;
     callbacks.structSize = sizeof(callbacks) + 16;
     callbacks.onStat = nullptr;
@@ -843,8 +843,8 @@ HWTEST_F(VirtualEntryCapiTest, CreateInfo_ContextlessKnownFile_AllowMissingStatA
         return static_cast<int>(UDMF_E_OK);
     };
     callbacks.onCancel = [](void *, const char* const *, uint32_t) { return static_cast<int>(UDMF_E_OK); };
-    InfoPtr info(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks, nullptr, nullptr),
-        OH_UdmfVirtualFileInfo_Destroy);
+    InfoPtr info(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks, nullptr, nullptr),
+        OH_UDMF_DestroyVirtualFileInfo);
     ASSERT_NE(info, nullptr);
     auto provider = CreateNdkVirtualEntryProvider(info->info_);
     ASSERT_NE(provider, nullptr);
@@ -867,18 +867,18 @@ HWTEST_F(VirtualEntryCapiTest, SetVirtualEntry_ReplaceInfo_FinalizeEachContextOn
 {
     CallbackContext firstContext;
     CallbackContext secondContext;
-    InfoPtr first(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &firstContext, OnFinalize),
-        OH_UdmfVirtualFileInfo_Destroy);
-    InfoPtr second(OH_UdmfVirtualFileInfo_Create(item_.get(), &callbacks_, &secondContext, OnFinalize),
-        OH_UdmfVirtualFileInfo_Destroy);
+    InfoPtr first(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &firstContext, OnFinalize),
+        OH_UDMF_DestroyVirtualFileInfo);
+    InfoPtr second(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &secondContext, OnFinalize),
+        OH_UDMF_DestroyVirtualFileInfo);
     UriPtr uri(OH_UdsFileUri_Create(), OH_UdsFileUri_Destroy);
     ASSERT_NE(first, nullptr);
     ASSERT_NE(second, nullptr);
     ASSERT_NE(uri, nullptr);
-    ASSERT_EQ(OH_UdsFileUri_SetVirtualEntry(uri.get(), first.get()), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetFileUriVirtualEntry(uri.get(), first.get()), UDMF_E_OK);
     first.reset();
     EXPECT_EQ(firstContext.finalized, 0u);
-    ASSERT_EQ(OH_UdsFileUri_SetVirtualEntry(uri.get(), second.get()), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetFileUriVirtualEntry(uri.get(), second.get()), UDMF_E_OK);
     EXPECT_EQ(firstContext.finalized, 1u);
     second.reset();
     EXPECT_EQ(secondContext.finalized, 0u);

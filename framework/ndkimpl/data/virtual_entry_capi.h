@@ -30,14 +30,14 @@ class File;
 class NdkVirtualEntryCallbacks final {
 public:
     NdkVirtualEntryCallbacks(
-        const OH_UdmfVirtualFileCallbacks &callbacks, void *context, OH_UdmfVirtualFile_Finalize finalize);
+        const OH_UDMF_VirtualFileCallbacks &callbacks, void *context, OH_UDMF_VirtualFileFinalize finalize);
     ~NdkVirtualEntryCallbacks();
 
-    const OH_UdmfVirtualFileCallbacks callbacks_;
+    const OH_UDMF_VirtualFileCallbacks callbacks_;
     void *const context_;
 
 private:
-    const OH_UdmfVirtualFile_Finalize finalize_;
+    const OH_UDMF_VirtualFileFinalize finalize_;
 };
 
 struct NdkVirtualEntryInfo {
@@ -49,13 +49,13 @@ sptr<IVirtualEntryProvider> CreateNdkVirtualEntryProvider(const std::shared_ptr<
 bool AttachNdkVirtualEntry(const std::shared_ptr<File> &file, const std::shared_ptr<NdkVirtualEntryInfo> &info);
 } // namespace OHOS::UDMF
 
-struct OH_UdmfVirtualItem {
+struct OH_UDMF_VirtualItem {
     const int64_t cid = NdkStructId::UDMF_VIRTUAL_ITEM_STRUCT_ID;
     OHOS::UDMF::VirtualEntry entry_;
     mutable std::mutex mutex;
 };
 
-struct OH_UdmfVirtualFileInfo {
+struct OH_UDMF_VirtualFileInfo {
     const int64_t cid = NdkStructId::UDMF_VIRTUAL_FILE_INFO_STRUCT_ID;
     std::shared_ptr<OHOS::UDMF::NdkVirtualEntryInfo> info_;
 };

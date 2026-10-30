@@ -128,11 +128,11 @@ public:
             info_->callbacks->callbacks_.onStat == nullptr) {
             return -EINVAL;
         }
-        OH_UdmfVirtualItem *result = info_->callbacks->callbacks_.onStat(info_->callbacks->context_, id.c_str());
+        OH_UDMF_VirtualItem *result = info_->callbacks->callbacks_.onStat(info_->callbacks->context_, id.c_str());
         if (result == nullptr) {
             return -EIO;
         }
-        std::unique_ptr<OH_UdmfVirtualItem> item(result);
+        std::unique_ptr<OH_UDMF_VirtualItem> item(result);
         if (item->cid != NdkStructId::UDMF_VIRTUAL_ITEM_STRUCT_ID || item->entry_.type != VirtualEntryType::FILE ||
             !IsValidVirtualEntry(item->entry_)) {
             return -EINVAL;
@@ -282,7 +282,7 @@ private:
 } // namespace
 
 NdkVirtualEntryCallbacks::NdkVirtualEntryCallbacks(
-    const OH_UdmfVirtualFileCallbacks &callbacks, void *context, OH_UdmfVirtualFile_Finalize finalize)
+    const OH_UDMF_VirtualFileCallbacks &callbacks, void *context, OH_UDMF_VirtualFileFinalize finalize)
     : callbacks_(callbacks), context_(context), finalize_(finalize)
 {
 }
@@ -311,23 +311,23 @@ bool AttachNdkVirtualEntry(const std::shared_ptr<File> &file, const std::shared_
 } // namespace OHOS::UDMF
 
 namespace {
-bool IsValidVirtualItem(const OH_UdmfVirtualItem *item)
+bool IsValidVirtualItem(const OH_UDMF_VirtualItem *item)
 {
     return item != nullptr && item->cid == NdkStructId::UDMF_VIRTUAL_ITEM_STRUCT_ID;
 }
 
-bool IsValidVirtualFileInfo(const OH_UdmfVirtualFileInfo *info)
+bool IsValidVirtualFileInfo(const OH_UDMF_VirtualFileInfo *info)
 {
     return info != nullptr && info->cid == NdkStructId::UDMF_VIRTUAL_FILE_INFO_STRUCT_ID && info->info_ != nullptr;
 }
 } // namespace
 
-OH_UdmfVirtualItem *OH_UdmfVirtualItem_CreateFile(const char *name, const char *id, int64_t modifyTime)
+OH_UDMF_VirtualItem *OH_UDMF_CreateVirtualFileItem(const char *name, const char *id, int64_t modifyTime)
 {
     if (name == nullptr || id == nullptr || !OHOS::UDMF::IsValidName(name) || !OHOS::UDMF::IsValidId(id)) {
         return nullptr;
     }
-    auto *item = new (std::nothrow) OH_UdmfVirtualItem();
+    auto *item = new (std::nothrow) OH_UDMF_VirtualItem();
     if (item == nullptr) {
         return nullptr;
     }
@@ -338,12 +338,12 @@ OH_UdmfVirtualItem *OH_UdmfVirtualItem_CreateFile(const char *name, const char *
     return item;
 }
 
-OH_UdmfVirtualItem *OH_UdmfVirtualItem_CreateDirectory(const char *name, int64_t modifyTime)
+OH_UDMF_VirtualItem *OH_UDMF_CreateVirtualDirectoryItem(const char *name, int64_t modifyTime)
 {
     if (name == nullptr || !OHOS::UDMF::IsValidName(name)) {
         return nullptr;
     }
-    auto *item = new (std::nothrow) OH_UdmfVirtualItem();
+    auto *item = new (std::nothrow) OH_UDMF_VirtualItem();
     if (item == nullptr) {
         return nullptr;
     }
@@ -353,14 +353,14 @@ OH_UdmfVirtualItem *OH_UdmfVirtualItem_CreateDirectory(const char *name, int64_t
     return item;
 }
 
-void OH_UdmfVirtualItem_Destroy(OH_UdmfVirtualItem *item)
+void OH_UDMF_DestroyVirtualItem(OH_UDMF_VirtualItem *item)
 {
     if (IsValidVirtualItem(item)) {
         delete item;
     }
 }
 
-int OH_UdmfVirtualItem_SetFileSize(OH_UdmfVirtualItem *item, int64_t size)
+int OH_UDMF_SetVirtualFileSize(OH_UDMF_VirtualItem *item, int64_t size)
 {
     if (!IsValidVirtualItem(item) || size < 0) {
         return UDMF_E_INVALID_PARAM;
@@ -373,7 +373,7 @@ int OH_UdmfVirtualItem_SetFileSize(OH_UdmfVirtualItem *item, int64_t size)
     return UDMF_E_OK;
 }
 
-int OH_UdmfVirtualItem_ClearFileSize(OH_UdmfVirtualItem *item)
+int OH_UDMF_ClearVirtualFileSize(OH_UDMF_VirtualItem *item)
 {
     if (!IsValidVirtualItem(item)) {
         return UDMF_E_INVALID_PARAM;
@@ -386,7 +386,7 @@ int OH_UdmfVirtualItem_ClearFileSize(OH_UdmfVirtualItem *item)
     return UDMF_E_OK;
 }
 
-int OH_UdmfVirtualItem_AddChild(OH_UdmfVirtualItem *directory, const OH_UdmfVirtualItem *child)
+int OH_UDMF_AddVirtualItemChild(OH_UDMF_VirtualItem *directory, const OH_UDMF_VirtualItem *child)
 {
     if (!IsValidVirtualItem(directory) || !IsValidVirtualItem(child) || directory == child) {
         return UDMF_E_INVALID_PARAM;
@@ -404,11 +404,11 @@ int OH_UdmfVirtualItem_AddChild(OH_UdmfVirtualItem *directory, const OH_UdmfVirt
     return UDMF_E_OK;
 }
 
-OH_UdmfVirtualFileInfo *OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem *itemInfo,
-    const OH_UdmfVirtualFileCallbacks *callbacks, void *context, OH_UdmfVirtualFile_Finalize finalize)
+OH_UDMF_VirtualFileInfo *OH_UDMF_CreateVirtualFileInfo(const OH_UDMF_VirtualItem *itemInfo,
+    const OH_UDMF_VirtualFileCallbacks *callbacks, void *context, OH_UDMF_VirtualFileFinalize finalize)
 {
     if (!IsValidVirtualItem(itemInfo) || callbacks == nullptr ||
-        callbacks->structSize < sizeof(OH_UdmfVirtualFileCallbacks) || callbacks->onRead == nullptr ||
+        callbacks->structSize < sizeof(OH_UDMF_VirtualFileCallbacks) || callbacks->onRead == nullptr ||
         (context != nullptr && finalize == nullptr)) {
         return nullptr;
     }
@@ -416,7 +416,7 @@ OH_UdmfVirtualFileInfo *OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem *
     if (!OHOS::UDMF::IsValidVirtualEntry(itemInfo->entry_)) {
         return nullptr;
     }
-    auto *result = new (std::nothrow) OH_UdmfVirtualFileInfo();
+    auto *result = new (std::nothrow) OH_UDMF_VirtualFileInfo();
     if (result == nullptr) {
         return nullptr;
     }
@@ -427,14 +427,14 @@ OH_UdmfVirtualFileInfo *OH_UdmfVirtualFileInfo_Create(const OH_UdmfVirtualItem *
     return result;
 }
 
-void OH_UdmfVirtualFileInfo_Destroy(OH_UdmfVirtualFileInfo *info)
+void OH_UDMF_DestroyVirtualFileInfo(OH_UDMF_VirtualFileInfo *info)
 {
     if (info != nullptr && info->cid == NdkStructId::UDMF_VIRTUAL_FILE_INFO_STRUCT_ID) {
         delete info;
     }
 }
 
-int OH_UdsFileUri_SetVirtualEntry(OH_UdsFileUri *fileUri, const OH_UdmfVirtualFileInfo *info)
+int OH_UDMF_SetFileUriVirtualEntry(OH_UdsFileUri *fileUri, const OH_UDMF_VirtualFileInfo *info)
 {
     if (IsInvalidUdsObjectPtr(fileUri, NdkStructId::UDS_FILE_URI_STRUCT_ID) || !IsValidVirtualFileInfo(info)) {
         return UDMF_E_INVALID_PARAM;
@@ -444,7 +444,7 @@ int OH_UdsFileUri_SetVirtualEntry(OH_UdsFileUri *fileUri, const OH_UdmfVirtualFi
     return UDMF_E_OK;
 }
 
-int OH_UdsFileUri_ClearVirtualEntry(OH_UdsFileUri *fileUri)
+int OH_UDMF_ClearFileUriVirtualEntry(OH_UdsFileUri *fileUri)
 {
     if (IsInvalidUdsObjectPtr(fileUri, NdkStructId::UDS_FILE_URI_STRUCT_ID)) {
         return UDMF_E_INVALID_PARAM;

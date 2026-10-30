@@ -4930,20 +4930,20 @@ HWTEST_F(UDMFTest, OH_UDMF_Summary_Repopulate_001, TestSize.Level1)
  */
 HWTEST_F(UDMFTest, OH_UdmfRecord_AddVirtualFileUri_001, TestSize.Level1)
 {
-    auto item = OH_UdmfVirtualItem_CreateFile("example.bin", "file-id", 100);
+    auto item = OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", 100);
     ASSERT_NE(item, nullptr);
-    ASSERT_EQ(OH_UdmfVirtualItem_SetFileSize(item, 1024), UDMF_E_OK);
-    OH_UdmfVirtualFileCallbacks callbacks{};
-    callbacks.structSize = sizeof(OH_UdmfVirtualFileCallbacks);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item, 1024), UDMF_E_OK);
+    OH_UDMF_VirtualFileCallbacks callbacks{};
+    callbacks.structSize = sizeof(OH_UDMF_VirtualFileCallbacks);
     callbacks.onRead = ReadVirtualEntry;
     callbacks.onCancel = CancelVirtualEntry;
-    auto info = OH_UdmfVirtualFileInfo_Create(item, &callbacks, nullptr, nullptr);
+    auto info = OH_UDMF_CreateVirtualFileInfo(item, &callbacks, nullptr, nullptr);
     auto fileUri = OH_UdsFileUri_Create();
     auto record = OH_UdmfRecord_Create();
     ASSERT_NE(info, nullptr);
     ASSERT_NE(fileUri, nullptr);
     ASSERT_NE(record, nullptr);
-    ASSERT_EQ(OH_UdsFileUri_SetVirtualEntry(fileUri, info), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetFileUriVirtualEntry(fileUri, info), UDMF_E_OK);
 
     EXPECT_EQ(OH_UdmfRecord_AddFileUri(record, fileUri), UDMF_E_OK);
     ASSERT_NE(record->record_, nullptr);
@@ -4952,7 +4952,7 @@ HWTEST_F(UDMFTest, OH_UdmfRecord_AddVirtualFileUri_001, TestSize.Level1)
 
     OH_UdmfRecord_Destroy(record);
     OH_UdsFileUri_Destroy(fileUri);
-    OH_UdmfVirtualFileInfo_Destroy(info);
-    OH_UdmfVirtualItem_Destroy(item);
+    OH_UDMF_DestroyVirtualFileInfo(info);
+    OH_UDMF_DestroyVirtualItem(item);
 }
 } // namespace OHOS::Test
