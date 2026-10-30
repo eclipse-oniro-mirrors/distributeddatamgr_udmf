@@ -22,8 +22,36 @@
 #include "napi_data_utils.h"
 #include "virtual_entry_provider_napi.h"
 #include "virtual_entry_attachment_registry.h"
+#include "virtual_file_info_napi.h"
 
 namespace OHOS::UDMF {
+namespace {
+constexpr size_t REQUIRED_ARGUMENT_COUNT = 2;
+constexpr size_t CONSTRUCTOR_ARGUMENT_COUNT = 4;
+
+bool IsType(napi_env env, napi_value value, napi_valuetype expected)
+{
+    napi_valuetype actual = napi_undefined;
+    return value != nullptr && napi_typeof(env, value, &actual) == napi_ok && actual == expected;
+}
+
+bool IsOptionalFunction(napi_env env, napi_value value)
+{
+    return value == nullptr || NapiDataUtils::IsUndefinedOrNull(env, value) || IsType(env, value, napi_function);
+}
+
+napi_value ThrowConstructorTypeError(napi_env env, const char *message)
+{
+    (void)napi_throw_type_error(env, nullptr, message);
+    return nullptr;
+}
+
+bool SetProperty(napi_env env, napi_value object, const char *name, napi_value value)
+{
+    return napi_set_named_property(env, object, name, value) == napi_ok;
+}
+} // namespace
+
 bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size)
 {
     double number = 0;
@@ -34,6 +62,48 @@ bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size)
     }
     size = static_cast<int64_t>(number);
     return true;
+}
+
+napi_value VirtualFileInfoNapi::Constructor(napi_env env)
+{
+    return NapiDataUtils::DefineClass(env, "VirtualFileInfo", nullptr, 0, New);
+}
+
+napi_value VirtualFileInfoNapi::New(napi_env env, napi_callback_info info)
+{
+    size_t argc = CONSTRUCTOR_ARGUMENT_COUNT;
+    napi_value argv[CONSTRUCTOR_ARGUMENT_COUNT] = { nullptr };
+    napi_value self = nullptr;
+    if (napi_get_cb_info(env, info, &argc, argv, &self, nullptr) != napi_ok || self == nullptr) {
+        return ThrowConstructorTypeError(env, "Failed to obtain constructor parameters");
+    }
+    if (argc < REQUIRED_ARGUMENT_COUNT) {
+        return ThrowConstructorTypeError(env, "itemInfo and onRead are required");
+    }
+    if (!IsType(env, argv[0], napi_object)) {
+        return ThrowConstructorTypeError(env, "itemInfo must be an object");
+    }
+    if (!IsType(env, argv[1], napi_function)) {
+        return ThrowConstructorTypeError(env, "onRead must be a function");
+    }
+    if (!IsOptionalFunction(env, argv[2])) {
+        return ThrowConstructorTypeError(env, "onStat must be a function");
+    }
+    if (!IsOptionalFunction(env, argv[3])) {
+        return ThrowConstructorTypeError(env, "onCancel must be a function");
+    }
+    if (!SetProperty(env, self, "itemInfo", argv[0]) || !SetProperty(env, self, "onRead", argv[1])) {
+        return ThrowConstructorTypeError(env, "Failed to initialize VirtualFileInfo");
+    }
+    if (argv[2] != nullptr && !NapiDataUtils::IsUndefinedOrNull(env, argv[2]) &&
+        !SetProperty(env, self, "onStat", argv[2])) {
+        return ThrowConstructorTypeError(env, "Failed to initialize onStat");
+    }
+    if (argv[3] != nullptr && !NapiDataUtils::IsUndefinedOrNull(env, argv[3]) &&
+        !SetProperty(env, self, "onCancel", argv[3])) {
+        return ThrowConstructorTypeError(env, "Failed to initialize onCancel");
+    }
+    return self;
 }
 
 VirtualEntryNapiRegistry &VirtualEntryNapiRegistry::GetInstance()

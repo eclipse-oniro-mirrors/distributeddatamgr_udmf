@@ -31,6 +31,7 @@
 #include "unified_data_napi.h"
 #include "unified_record_napi.h"
 #include "video_napi.h"
+#include "virtual_file_info_napi.h"
 
 using namespace OHOS::UDMF;
 
@@ -47,6 +48,9 @@ static napi_value Init(napi_env env, napi_value exports)
     LOG_INFO(UDMF_KITS_NAPI, "init UnifiedData %{public}d", status);
     status = napi_set_named_property(env, exports, "Summary", OHOS::UDMF::SummaryNapi::Constructor(env));
     LOG_INFO(UDMF_KITS_NAPI, "init Summary %{public}d", status);
+    status = napi_set_named_property(
+        env, exports, "VirtualFileInfo", OHOS::UDMF::VirtualFileInfoNapi::Constructor(env));
+    LOG_INFO(UDMF_KITS_NAPI, "init VirtualFileInfo %{public}d", status);
     status = napi_set_named_property(env, exports, "UnifiedRecord", OHOS::UDMF::UnifiedRecordNapi::Constructor(env));
     LOG_INFO(UDMF_KITS_NAPI, "init UnifiedRecord %{public}d", status);
     status = napi_set_named_property(env, exports, "Text", OHOS::UDMF::TextNapi::Constructor(env));

@@ -47,11 +47,19 @@ export type VirtualFileOnRead = (id: string, offset: long, length: int) => Promi
 
 export type VirtualFileOnCancel = (idList: Array<string>) => Promise<void>;
 
-export interface VirtualFileInfo {
+export class VirtualFileInfo {
   itemInfo: VirtualItemType;
   onStat?: VirtualFileOnStat;
   onRead: VirtualFileOnRead;
   onCancel?: VirtualFileOnCancel;
+
+  constructor(itemInfo: VirtualItemType, onRead: VirtualFileOnRead,
+      onStat?: VirtualFileOnStat, onCancel?: VirtualFileOnCancel) {
+    this.itemInfo = itemInfo;
+    this.onRead = onRead;
+    this.onStat = onStat;
+    this.onCancel = onCancel;
+  }
 }
 """)
 
