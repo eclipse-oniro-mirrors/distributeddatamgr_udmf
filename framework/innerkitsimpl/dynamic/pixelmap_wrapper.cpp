@@ -83,7 +83,7 @@ PixelMapDetails *ParseInfoFromPixelMap(OHOS::Media::PixelMap *pixelMap)
     details->height = pixelMap->GetHeight();
     details->pixelFormat = static_cast<int32_t>(pixelMap->GetPixelFormat());
     details->alphaType = static_cast<int32_t>(pixelMap->GetAlphaType());
-    auto length = pixelMap->GetByteCount();
+    auto length = pixelMap->GetAllocationByteCount();
     if (length <= 0) {
         LOG_ERROR(UDMF_KITS_INNER, "Has no length");
         return details;

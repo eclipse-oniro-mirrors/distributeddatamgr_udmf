@@ -160,7 +160,7 @@ HWTEST_F(SystemDefinedPixelMapTest, GetPixelMapFromRawData003, TestSize.Level1)
         Media::PixelFormat::ARGB_8888, Media::PixelFormat::ARGB_8888 };
     std::unique_ptr<OHOS::Media::PixelMap> pixelMap =
         OHOS::Media::PixelMap::Create(color, sizeof(color) / sizeof(color[0]), opts);
-    auto length = pixelMap->GetByteCount();
+    auto length = pixelMap->GetAllocationByteCount();
     std::vector<uint8_t> rawData;
     rawData.resize(length);
     pixelMap->ReadPixels(length, rawData.data());
@@ -174,7 +174,7 @@ HWTEST_F(SystemDefinedPixelMapTest, GetPixelMapFromRawData003, TestSize.Level1)
     systemDefinedPixelMap.SetRawData(rawData);
     systemDefinedPixelMap.SetDetails(details);
     auto getPixelMap = systemDefinedPixelMap.GetPixelMapFromRawData();
-    auto getLength = getPixelMap->GetByteCount();
+    auto getLength = getPixelMap->GetAllocationByteCount();
     EXPECT_EQ(length, getLength);
     std::vector<uint8_t> getRawData(getLength);
     getPixelMap->ReadPixels(length, getRawData.data());

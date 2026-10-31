@@ -498,7 +498,7 @@ HWTEST_F(NdkDataConversionTest, ConvertPixelMap_004, TestSize.Level1)
     ASSERT_TRUE(obj->GetValue(PIXEL_MAP, getPixelMap));
     ASSERT_NE(getPixelMap, nullptr);
     ASSERT_EQ(getPixelMap->GetHeight(), pixelMapIn->GetHeight());
-    ASSERT_EQ(getPixelMap->GetByteCount(), pixelMapIn->GetByteCount());
+    ASSERT_EQ(getPixelMap->GetAllocationByteCount(), pixelMapIn->GetAllocationByteCount());
     OH_UdsPixelMap_Destroy(pixelMapUds);
     OH_UdmfRecord_Destroy(record);
     OH_UdmfData_Destroy(data);

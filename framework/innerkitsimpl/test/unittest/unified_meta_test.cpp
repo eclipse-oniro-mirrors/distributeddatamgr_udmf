@@ -714,7 +714,7 @@ HWTEST_F(UnifiedMetaTest, GetValueSize001, TestSize.Level1)
     ValueType value = std::make_shared<OHOS::Media::PixelMap>();
     bool isCalValueType = true;
     int64_t ret = ObjectUtils::GetValueSize(value, isCalValueType);
-    EXPECT_EQ(ret, (std::get<std::shared_ptr<OHOS::Media::PixelMap>>(value))->GetByteCount());
+    EXPECT_EQ(ret, (std::get<std::shared_ptr<OHOS::Media::PixelMap>>(value))->GetAllocationByteCount());
 }
 
 /**
