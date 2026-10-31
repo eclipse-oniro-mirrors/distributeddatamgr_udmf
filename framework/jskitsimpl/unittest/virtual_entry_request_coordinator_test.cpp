@@ -34,8 +34,8 @@ void RunReader(const std::shared_future<void> &start, VirtualEntryRequestCoordin
     std::atomic<size_t> &inFlight, std::atomic<size_t> &violations, std::atomic<size_t> &accepted)
 {
     start.wait();
-    constexpr size_t ATTEMPT_COUNT = 2000;
-    for (size_t attempt = 0; attempt < ATTEMPT_COUNT; ++attempt) {
+    constexpr size_t attemptCount = 2000;
+    for (size_t attempt = 0; attempt < attemptCount; ++attempt) {
         if (!coordinator.TryAcquire()) {
             continue;
         }

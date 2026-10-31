@@ -186,7 +186,8 @@ typedef int (*OH_UDMF_VirtualFileOnRead)(void* context, const char* id, int64_t 
  * @brief Called when virtual file operations are cancelled.
  *
  * @param context [in] User context passed to {@link OH_UDMF_CreateVirtualFileInfo}.
- * @param idList [in] Identifiers of the cancelled virtual files. The array and strings are valid only during the callback.
+ * @param idList [in] Identifiers of the cancelled virtual files.
+ *                   The array and strings are valid only during the callback.
  * @param count [in] Number of identifiers in <code>idList</code>.
  * @return Returns the status code of the execution. See {@link Udmf_ErrCode}.
  *         {@link UDMF_E_OK} The operation was cancelled successfully.
@@ -195,7 +196,7 @@ typedef int (*OH_UDMF_VirtualFileOnRead)(void* context, const char* id, int64_t 
  * @see Udmf_ErrCode
  * @since 26.1.0
  */
-typedef int (*OH_UDMF_VirtualFileOnCancel)(void* context, const char* const* idList, uint32_t count);
+typedef int (*OH_UDMF_VirtualFileOnCancel)(void* context, const char* const *idList, uint32_t count);
 
 /**
  * @brief Releases a user context retained by UDMF.
