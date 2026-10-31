@@ -6402,6 +6402,20 @@
             "referenceURL": "https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis/js-apis-data-uniformTypeDescriptor.md#uniformdatatype"
         },
         {
+            "typeId": "com.samsung.srw-raw-image",
+            "belongingToTypes": [
+                "general.raw-image"
+            ],
+            "filenameExtensions": [
+                ".srw"
+            ],
+            "mimeTypes": [
+                "image/x-samsung-srw"
+            ],
+            "description": "Samsung RAW Image",
+            "referenceURL": "https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis/js-apis-data-uniformTypeDescriptor.md#uniformdatatype"
+        },
+        {
             "typeId": "com.epson.erf-raw-image",
             "belongingToTypes": [
                 "general.raw-image"
