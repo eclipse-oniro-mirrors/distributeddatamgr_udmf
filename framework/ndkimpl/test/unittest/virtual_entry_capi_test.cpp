@@ -40,11 +40,21 @@ namespace {
 using ItemPtr = std::unique_ptr<OH_UDMF_VirtualItem, decltype(&OH_UDMF_DestroyVirtualItem)>;
 using InfoPtr = std::unique_ptr<OH_UDMF_VirtualFileInfo, decltype(&OH_UDMF_DestroyVirtualFileInfo)>;
 using UriPtr = std::unique_ptr<OH_UdsFileUri, decltype(&OH_UdsFileUri_Destroy)>;
+constexpr int64_t TEST_MODIFY_TIME = 123;
+constexpr int64_t TEST_FILE_SIZE = 7;
+constexpr size_t CONCURRENT_READ_COUNT = 8;
+
+enum class StatMode : uint8_t {
+    NORMAL,
+    FAILURE,
+    DIRECTORY,
+    MISSING_SIZE,
+};
 
 struct CallbackContext {
     int readStatus = UDMF_E_OK;
     int cancelStatus = UDMF_E_OK;
-    int statMode = 0;
+    StatMode statMode = StatMode::NORMAL;
     bool oversize = false;
     bool holdReads = false;
     bool releaseReads = false;
@@ -62,14 +72,14 @@ struct CallbackContext {
 OH_UDMF_VirtualItem *OnStat(void *value, const char *id)
 {
     auto &context = *static_cast<CallbackContext *>(value);
-    if (context.statMode == 1) {
+    if (context.statMode == StatMode::FAILURE) {
         return nullptr;
     }
-    if (context.statMode == 2) {
-        return OH_UDMF_CreateVirtualDirectoryItem("directory", 123);
+    if (context.statMode == StatMode::DIRECTORY) {
+        return OH_UDMF_CreateVirtualDirectoryItem("directory", TEST_MODIFY_TIME);
     }
-    auto item = OH_UDMF_CreateVirtualFileItem("example.bin", id, 123);
-    if (item != nullptr && context.statMode != 3) {
+    auto item = OH_UDMF_CreateVirtualFileItem("example.bin", id, TEST_MODIFY_TIME);
+    if (item != nullptr && context.statMode != StatMode::MISSING_SIZE) {
         (void)OH_UDMF_SetVirtualFileSize(item, static_cast<int64_t>(context.content.size()));
     }
     return item;
@@ -136,8 +146,8 @@ public:
     void SetUp() override
     {
         callbacks_ = MakeCallbacks();
-        item_.reset(OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", 123));
-        if (OH_UDMF_SetVirtualFileSize(item_.get(), 7) == UDMF_E_OK) {
+        item_.reset(OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", TEST_MODIFY_TIME));
+        if (OH_UDMF_SetVirtualFileSize(item_.get(), TEST_FILE_SIZE) == UDMF_E_OK) {
             info_.reset(OH_UDMF_CreateVirtualFileInfo(item_.get(), &callbacks_, &context_, OnFinalize));
         }
         if (info_ != nullptr) {
@@ -233,7 +243,7 @@ HWTEST_F(VirtualEntryCapiTest, SetAndClearFileSize_Boundaries_PreserveMetadata, 
     EXPECT_EQ(OH_UDMF_ClearVirtualFileSize(item_.get()), UDMF_E_OK);
     EXPECT_EQ(item_->entry_.size, -1);
     EXPECT_EQ(item_->entry_.name, "example.bin");
-    EXPECT_EQ(item_->entry_.modifyTime, 123);
+    EXPECT_EQ(item_->entry_.modifyTime, TEST_MODIFY_TIME);
 }
 
 /**
@@ -247,12 +257,12 @@ HWTEST_F(VirtualEntryCapiTest, AddChild_DeepCopy_KeepSnapshotAfterSourceChanges,
     ItemPtr directory(OH_UDMF_CreateVirtualDirectoryItem("dir", 0), OH_UDMF_DestroyVirtualItem);
     ASSERT_NE(directory, nullptr);
     ASSERT_NE(item_, nullptr);
-    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 7), UDMF_E_OK);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), TEST_FILE_SIZE), UDMF_E_OK);
     ASSERT_EQ(OH_UDMF_AddVirtualItemChild(directory.get(), item_.get()), UDMF_E_OK);
     ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item_.get(), 99), UDMF_E_OK);
     item_.reset();
     ASSERT_EQ(directory->entry_.subItems.size(), 1u);
-    EXPECT_EQ(directory->entry_.subItems.front().size, 7);
+    EXPECT_EQ(directory->entry_.subItems.front().size, TEST_FILE_SIZE);
     EXPECT_EQ(directory->entry_.subItems.front().id, "file-id");
 }
 
@@ -339,7 +349,7 @@ HWTEST_F(VirtualEntryCapiTest, CreateInfo_MissingCancel_ReadAndCancelSucceed, Te
     auto provider = CreateNdkVirtualEntryProvider(info->info_);
     ASSERT_NE(provider, nullptr);
     std::vector<uint8_t> bytes;
-    EXPECT_EQ(provider->Read("file-id", 0, 7, bytes), 0);
+    EXPECT_EQ(provider->Read("file-id", 0, TEST_FILE_SIZE, bytes), 0);
     EXPECT_EQ(bytes, context_.content);
     EXPECT_EQ(provider->Cancel({ "file-id" }), 0);
     EXPECT_EQ(context_.cancelCalls, 0u);
@@ -472,17 +482,17 @@ HWTEST_F(VirtualEntryCapiTest, Stat_CallbackResults_ValidateKindAndPropagateMeta
 {
     ASSERT_NE(provider_, nullptr);
     VirtualEntry entry;
-    context_.statMode = 1;
+    context_.statMode = StatMode::FAILURE;
     EXPECT_EQ(provider_->Stat("file-id", entry), -EIO);
-    context_.statMode = 2;
+    context_.statMode = StatMode::DIRECTORY;
     EXPECT_EQ(provider_->Stat("file-id", entry), -EINVAL);
-    context_.statMode = 3;
+    context_.statMode = StatMode::MISSING_SIZE;
     EXPECT_EQ(provider_->Stat("file-id", entry), -EINVAL);
-    context_.statMode = 0;
+    context_.statMode = StatMode::NORMAL;
     EXPECT_EQ(provider_->Stat("file-id", entry), 0);
     EXPECT_EQ(entry.id, "file-id");
-    EXPECT_EQ(entry.size, 7);
-    EXPECT_EQ(entry.modifyTime, 123);
+    EXPECT_EQ(entry.size, TEST_FILE_SIZE);
+    EXPECT_EQ(entry.modifyTime, TEST_MODIFY_TIME);
 }
 
 /**
@@ -532,7 +542,7 @@ HWTEST_F(VirtualEntryCapiTest, Read_OffsetShortReadAndEof_PreserveByteContract, 
     EXPECT_EQ(bytes, (std::vector<uint8_t>{ 3, 4, 5, 6 }));
     EXPECT_EQ(context_.lastOffset, 3);
     EXPECT_EQ(context_.lastLength, 32u);
-    EXPECT_EQ(provider_->Read("file", 7, 1, bytes), 0);
+    EXPECT_EQ(provider_->Read("file", TEST_FILE_SIZE, 1, bytes), 0);
     EXPECT_TRUE(bytes.empty());
     EXPECT_EQ(provider_->Read("file", 0, 5 * 1024 * 1024, bytes), 0);
     EXPECT_EQ(bytes, context_.content);
@@ -607,10 +617,10 @@ HWTEST_F(VirtualEntryCapiTest, Read_ConcurrentCallbacks_RejectNinthAndRecoverQuo
 {
     ASSERT_NE(provider_, nullptr);
     context_.holdReads = true;
-    std::vector<int32_t> results(8, -EIO);
+    std::vector<int32_t> results(CONCURRENT_READ_COUNT, -EIO);
     std::vector<std::thread> threads;
     for (size_t index = 0; index < results.size(); ++index) {
-        threads.emplace_back([&, index] {
+        threads.emplace_back([this, &results, index] {
             std::vector<uint8_t> bytes;
             results[index] = provider_->Read("file", 0, 1, bytes);
         });
@@ -618,7 +628,8 @@ HWTEST_F(VirtualEntryCapiTest, Read_ConcurrentCallbacks_RejectNinthAndRecoverQuo
     bool ready = false;
     {
         std::unique_lock<std::mutex> lock(context_.mutex);
-        ready = context_.condition.wait_for(lock, std::chrono::seconds(2), [&] { return context_.readCalls == 8; });
+        ready = context_.condition.wait_for(lock, std::chrono::seconds(2),
+            [this] { return context_.readCalls == CONCURRENT_READ_COUNT; });
     }
     std::vector<uint8_t> bytes;
     int32_t rejected = ready ? provider_->Read("file", 0, 1, bytes) : -ETIMEDOUT;

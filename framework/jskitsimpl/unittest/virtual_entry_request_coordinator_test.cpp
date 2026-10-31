@@ -18,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <thread>
@@ -28,6 +29,35 @@
 using namespace testing::ext;
 
 namespace OHOS::UDMF {
+namespace {
+void RunReader(const std::shared_future<void> &start, VirtualEntryRequestCoordinator &coordinator, size_t quota,
+    std::atomic<size_t> &inFlight, std::atomic<size_t> &violations, std::atomic<size_t> &accepted)
+{
+    start.wait();
+    constexpr size_t ATTEMPT_COUNT = 2000;
+    for (size_t attempt = 0; attempt < ATTEMPT_COUNT; ++attempt) {
+        if (!coordinator.TryAcquire()) {
+            continue;
+        }
+        ++accepted;
+        if (++inFlight > quota) {
+            ++violations;
+        }
+        std::this_thread::yield();
+        --inFlight;
+        coordinator.Release();
+    }
+}
+
+void ReleaseSlots(const std::shared_future<void> &start, VirtualEntryRequestCoordinator &coordinator, size_t count)
+{
+    start.wait();
+    for (size_t slot = 0; slot < count; ++slot) {
+        coordinator.Release();
+    }
+}
+} // namespace
+
 class VirtualEntryRequestCoordinatorTest : public testing::Test {
 };
 
@@ -150,10 +180,10 @@ HWTEST_F(VirtualEntryRequestCoordinatorTest, Wait_CompletionNotified_WakeBeforeD
     std::promise<void> waiting;
     bool completed = false;
     bool result = false;
-    std::thread reader([&] {
+    std::thread reader([&coordinator, &condition, &mutex, &waiting, &result, &completed] {
         std::unique_lock<std::mutex> lock(mutex);
         waiting.set_value();
-        result = coordinator.Wait(condition, lock, [&] { return completed; });
+        result = coordinator.Wait(condition, lock, [&completed] { return completed; });
     });
     waiting.get_future().wait();
     {
@@ -183,21 +213,8 @@ HWTEST_F(VirtualEntryRequestCoordinatorTest, TryAcquire_ConcurrentReaders_Respec
     std::atomic<size_t> accepted{ 0 };
     std::vector<std::thread> readers;
     for (size_t index = 0; index < 16; ++index) {
-        readers.emplace_back([&] {
-            start.wait();
-            for (size_t attempt = 0; attempt < 2000; ++attempt) {
-                if (!coordinator.TryAcquire()) {
-                    continue;
-                }
-                ++accepted;
-                if (++inFlight > quota) {
-                    ++violations;
-                }
-                std::this_thread::yield();
-                --inFlight;
-                coordinator.Release();
-            }
-        });
+        readers.emplace_back(RunReader, std::cref(start), std::ref(coordinator), quota, std::ref(inFlight),
+            std::ref(violations), std::ref(accepted));
     }
     begin.set_value();
     for (auto &reader : readers) {
@@ -234,12 +251,7 @@ HWTEST_F(VirtualEntryRequestCoordinatorTest, Release_ContendingReleases_ReturnEv
     auto start = begin.get_future().share();
     std::vector<std::thread> releasers;
     for (size_t index = 0; index < threads; ++index) {
-        releasers.emplace_back([&] {
-            start.wait();
-            for (size_t slot = 0; slot < slotsPerThread; ++slot) {
-                coordinator.Release();
-            }
-        });
+        releasers.emplace_back(ReleaseSlots, std::cref(start), std::ref(coordinator), slotsPerThread);
     }
     begin.set_value();
     for (auto &releaser : releasers) {

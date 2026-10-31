@@ -28,6 +28,10 @@ namespace OHOS::UDMF {
 namespace {
 constexpr size_t REQUIRED_ARGUMENT_COUNT = 2;
 constexpr size_t CONSTRUCTOR_ARGUMENT_COUNT = 4;
+constexpr size_t ITEM_INFO_ARGUMENT_INDEX = 0;
+constexpr size_t READ_ARGUMENT_INDEX = 1;
+constexpr size_t STAT_ARGUMENT_INDEX = 2;
+constexpr size_t CANCEL_ARGUMENT_INDEX = 3;
 
 bool IsType(napi_env env, napi_value value, napi_valuetype expected)
 {
@@ -80,27 +84,30 @@ napi_value VirtualFileInfoNapi::New(napi_env env, napi_callback_info info)
     if (argc < REQUIRED_ARGUMENT_COUNT) {
         return ThrowConstructorTypeError(env, "itemInfo and onRead are required");
     }
-    if (!IsType(env, argv[0], napi_object)) {
+    if (!IsType(env, argv[ITEM_INFO_ARGUMENT_INDEX], napi_object)) {
         return ThrowConstructorTypeError(env, "itemInfo must be an object");
     }
-    if (!IsType(env, argv[1], napi_function)) {
+    if (!IsType(env, argv[READ_ARGUMENT_INDEX], napi_function)) {
         return ThrowConstructorTypeError(env, "onRead must be a function");
     }
-    if (!IsOptionalFunction(env, argv[2])) {
+    if (!IsOptionalFunction(env, argv[STAT_ARGUMENT_INDEX])) {
         return ThrowConstructorTypeError(env, "onStat must be a function");
     }
-    if (!IsOptionalFunction(env, argv[3])) {
+    if (!IsOptionalFunction(env, argv[CANCEL_ARGUMENT_INDEX])) {
         return ThrowConstructorTypeError(env, "onCancel must be a function");
     }
-    if (!SetProperty(env, self, "itemInfo", argv[0]) || !SetProperty(env, self, "onRead", argv[1])) {
+    if (!SetProperty(env, self, "itemInfo", argv[ITEM_INFO_ARGUMENT_INDEX]) ||
+        !SetProperty(env, self, "onRead", argv[READ_ARGUMENT_INDEX])) {
         return ThrowConstructorTypeError(env, "Failed to initialize VirtualFileInfo");
     }
-    if (argv[2] != nullptr && !NapiDataUtils::IsUndefinedOrNull(env, argv[2]) &&
-        !SetProperty(env, self, "onStat", argv[2])) {
+    if (argv[STAT_ARGUMENT_INDEX] != nullptr &&
+        !NapiDataUtils::IsUndefinedOrNull(env, argv[STAT_ARGUMENT_INDEX]) &&
+        !SetProperty(env, self, "onStat", argv[STAT_ARGUMENT_INDEX])) {
         return ThrowConstructorTypeError(env, "Failed to initialize onStat");
     }
-    if (argv[3] != nullptr && !NapiDataUtils::IsUndefinedOrNull(env, argv[3]) &&
-        !SetProperty(env, self, "onCancel", argv[3])) {
+    if (argv[CANCEL_ARGUMENT_INDEX] != nullptr &&
+        !NapiDataUtils::IsUndefinedOrNull(env, argv[CANCEL_ARGUMENT_INDEX]) &&
+        !SetProperty(env, self, "onCancel", argv[CANCEL_ARGUMENT_INDEX])) {
         return ThrowConstructorTypeError(env, "Failed to initialize onCancel");
     }
     return self;

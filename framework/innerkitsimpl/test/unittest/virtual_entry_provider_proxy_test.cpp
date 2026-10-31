@@ -28,6 +28,13 @@ using namespace testing::ext;
 
 namespace OHOS::UDMF {
 namespace {
+constexpr int32_t STAT_ID_FIELD_COUNT = 1;
+constexpr int32_t STAT_NAME_FIELD_COUNT = 2;
+constexpr int32_t STAT_TYPE_FIELD_COUNT = 3;
+constexpr int32_t STAT_MODIFY_TIME_FIELD_COUNT = 4;
+constexpr int32_t STAT_SIZE_FIELD_COUNT = 5;
+constexpr int64_t TEST_MODIFY_TIME = 123;
+
 class TestReadCallback final : public VirtualEntryReadCallbackStub {
 public:
     int32_t OnResult(int32_t status, const std::vector<uint8_t> &data) override
@@ -114,7 +121,7 @@ public:
     int32_t memoryBytes_ = -1;
     int32_t sendStatus_ = 0;
     int32_t statStatus_ = 0;
-    int32_t statFields_ = 5;
+    int32_t statFields_ = STAT_SIZE_FIELD_COUNT;
     int32_t statType_ = static_cast<int32_t>(VirtualEntryType::FILE);
     int64_t statSize_ = 3;
     int flags_ = 0;
@@ -131,19 +138,19 @@ private:
         if (!reply.WriteInt32(statStatus_)) {
             return -EIO;
         }
-        if (statFields_ > 0) {
+        if (statFields_ >= STAT_ID_FIELD_COUNT) {
             (void)reply.WriteString(lastId_);
         }
-        if (statFields_ > 1) {
+        if (statFields_ >= STAT_NAME_FIELD_COUNT) {
             (void)reply.WriteString("example.bin");
         }
-        if (statFields_ > 2) {
+        if (statFields_ >= STAT_TYPE_FIELD_COUNT) {
             (void)reply.WriteInt32(statType_);
         }
-        if (statFields_ > 3) {
-            (void)reply.WriteInt64(123);
+        if (statFields_ >= STAT_MODIFY_TIME_FIELD_COUNT) {
+            (void)reply.WriteInt64(TEST_MODIFY_TIME);
         }
-        if (statFields_ > 4) {
+        if (statFields_ >= STAT_SIZE_FIELD_COUNT) {
             (void)reply.WriteInt64(statSize_);
         }
         return 0;
@@ -305,7 +312,7 @@ HWTEST_F(VirtualEntryProviderProxyTest, Stat_CompleteMetadata_PreserveFields, Te
     EXPECT_EQ(entry.id, "stat-file");
     EXPECT_EQ(entry.name, "example.bin");
     EXPECT_EQ(entry.type, VirtualEntryType::FILE);
-    EXPECT_EQ(entry.modifyTime, 123);
+    EXPECT_EQ(entry.modifyTime, TEST_MODIFY_TIME);
     EXPECT_EQ(entry.size, 3);
 }
 
