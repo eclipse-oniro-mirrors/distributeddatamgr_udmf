@@ -497,6 +497,7 @@ static constexpr UtdType UTD_TYPES[] = {
     { RW2_RAW_IMAGE, "RW2_RAW_IMAGE", "com.panasonic.rw2-raw-image" },
     { PEF_RAW_IMAGE, "PEF_RAW_IMAGE", "com.pentax.pef-raw-image" },
     { SRW_RAW_IMAGE, "SRW_RAW_IMAGE", "com.sumsung.srw-raw-image" },
+    { SAMSUNG_SRW_RAW_IMAGE, "SAMSUNG_SRW_RAW_IMAGE", "com.samsung.srw-raw-image" },
     { ERF_RAW_IMAGE, "ERF_RAW_IMAGE", "com.epson.erf-raw-image" },
     { ORF_RAW_IMAGE, "ORF_RAW_IMAGE", "com.olympus.orf-raw-image" },
     { IEF_IMAGE, "IEF_IMAGE", "general.ief-image" },
