@@ -54,8 +54,6 @@ public:
         sptr<IRemoteObject> iUdmfNotifier, std::shared_ptr<UnifiedData> unifiedData) override;
 
 private:
-    using AuditReporter = std::function<void(const UnifiedData &)>;
-
     class ServiceDeathRecipient : public IRemoteObject::DeathRecipient {
     public:
         ServiceDeathRecipient();
@@ -68,7 +66,6 @@ private:
     static std::mutex mutex_;
     static sptr<DistributedKv::IKvStoreDataService> kvDataServiceProxy_;
     static sptr<DistributedKv::IKvStoreDataService> GetDistributedKvDataService();
-    static int32_t PostProcessGetData(UnifiedData &unifiedData, const AuditReporter &auditReporter);
     sptr<IUdmfService> udmfProxy_;
 };
 } // namespace UDMF

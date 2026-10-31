@@ -120,7 +120,6 @@ ohos_shared_library("udmf_client") {
     "${udmf_framework_path}/common/udmf_copy_file.cpp",
     "${udmf_framework_path}/common/udmf_executor.cpp",
     "${udmf_framework_path}/innerkitsimpl/convert/udmf_conversion.cpp",
-    "${udmf_framework_path}/innerkitsimpl/client/audit_helper.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/udmf_async_client.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/udmf_client.cpp",
     "${udmf_framework_path}/innerkitsimpl/common/progress_queue.cpp",
