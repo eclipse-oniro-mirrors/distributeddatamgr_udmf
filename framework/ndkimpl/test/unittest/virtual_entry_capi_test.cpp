@@ -926,7 +926,7 @@ HWTEST_F(VirtualEntryCapiTest, SetVirtualEntry_ReplaceInfo_FinalizeEachContextOn
 
 /**
  * @tc.name: OnRemoteRequest_Stat_Dispatch_PreservesEntry
- * @tc.desc: Verify the NDK provider IPC stub dispatches STAT and returns entry metadata.
+ * @tc.desc: Verify the C API provider IPC stub dispatches STAT and returns entry metadata.
  * @tc.type: FUNC
  * @tc.author: agent
  */
@@ -963,7 +963,7 @@ HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Stat_MalformedParcel_ReturnsError
 
 /**
  * @tc.name: OnRemoteRequest_Read_Dispatch_ReturnsBytes
- * @tc.desc: Verify the NDK provider IPC stub dispatches READ and returns content via ashmem.
+ * @tc.desc: Verify the C API provider IPC stub dispatches READ and returns content via ashmem.
  * @tc.type: FUNC
  * @tc.author: agent
  */
@@ -1012,7 +1012,7 @@ HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Read_EmptyBytes_OmitsAshmem, Test
 
 /**
  * @tc.name: OnRemoteRequest_ReadAsync_Dispatch_DeliversCallback
- * @tc.desc: Verify the NDK provider IPC stub dispatches READ_ASYNC and delivers the callback.
+ * @tc.desc: Verify the C API provider IPC stub dispatches READ_ASYNC and delivers the callback.
  * @tc.type: FUNC
  * @tc.author: agent
  */
@@ -1051,7 +1051,7 @@ HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_ReadAsync_MissingCallback_Returns
 
 /**
  * @tc.name: OnRemoteRequest_Cancel_Dispatch_ReturnsStatus
- * @tc.desc: Verify the NDK provider IPC stub dispatches CANCEL and returns success.
+ * @tc.desc: Verify the C API provider IPC stub dispatches CANCEL and returns success.
  * @tc.type: FUNC
  * @tc.author: agent
  */

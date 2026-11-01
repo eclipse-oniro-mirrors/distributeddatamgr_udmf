@@ -30,8 +30,14 @@ using namespace testing::ext;
 
 namespace OHOS::UDMF {
 namespace {
+struct ReaderStats {
+    std::atomic<size_t> inFlight{ 0 };
+    std::atomic<size_t> violations{ 0 };
+    std::atomic<size_t> accepted{ 0 };
+};
+
 void RunReader(const std::shared_future<void> &start, VirtualEntryRequestCoordinator &coordinator, size_t quota,
-    std::atomic<size_t> &inFlight, std::atomic<size_t> &violations, std::atomic<size_t> &accepted)
+    ReaderStats &stats)
 {
     start.wait();
     constexpr size_t attemptCount = 2000;
@@ -39,12 +45,12 @@ void RunReader(const std::shared_future<void> &start, VirtualEntryRequestCoordin
         if (!coordinator.TryAcquire()) {
             continue;
         }
-        ++accepted;
-        if (++inFlight > quota) {
-            ++violations;
+        ++stats.accepted;
+        if (++stats.inFlight > quota) {
+            ++stats.violations;
         }
         std::this_thread::yield();
-        --inFlight;
+        --stats.inFlight;
         coordinator.Release();
     }
 }
@@ -208,21 +214,18 @@ HWTEST_F(VirtualEntryRequestCoordinatorTest, TryAcquire_ConcurrentReaders_Respec
     VirtualEntryRequestCoordinator coordinator(quota);
     std::promise<void> begin;
     auto start = begin.get_future().share();
-    std::atomic<size_t> inFlight{ 0 };
-    std::atomic<size_t> violations{ 0 };
-    std::atomic<size_t> accepted{ 0 };
+    ReaderStats stats;
     std::vector<std::thread> readers;
     for (size_t index = 0; index < 16; ++index) {
-        readers.emplace_back(RunReader, std::cref(start), std::ref(coordinator), quota, std::ref(inFlight),
-            std::ref(violations), std::ref(accepted));
+        readers.emplace_back(RunReader, std::cref(start), std::ref(coordinator), quota, std::ref(stats));
     }
     begin.set_value();
     for (auto &reader : readers) {
         reader.join();
     }
-    EXPECT_GT(accepted.load(), 0u);
-    EXPECT_EQ(violations.load(), 0u);
-    EXPECT_EQ(inFlight.load(), 0u);
+    EXPECT_GT(stats.accepted.load(), 0u);
+    EXPECT_EQ(stats.violations.load(), 0u);
+    EXPECT_EQ(stats.inFlight.load(), 0u);
     for (size_t index = 0; index < quota; ++index) {
         EXPECT_TRUE(coordinator.TryAcquire());
     }

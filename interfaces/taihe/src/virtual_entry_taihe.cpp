@@ -293,14 +293,19 @@ private:
     {
     }
 
+    struct CallbackFunction {
+        ani_ref callback = nullptr;
+        ani_function function = nullptr;
+    };
+
     static bool FindCallbackFunction(ani_env *env, ani_ref providerRef, const char *callbackName,
-        const char *functionName, ani_ref &callback, ani_function &function)
+        const char *functionName, CallbackFunction &result)
     {
         ani_namespace nameSpace = nullptr;
-        return GetProperty(env, static_cast<ani_object>(providerRef), callbackName, callback) &&
-               !IsNullOrUndefined(env, static_cast<ani_object>(callback)) &&
+        return GetProperty(env, static_cast<ani_object>(providerRef), callbackName, result.callback) &&
+               !IsNullOrUndefined(env, static_cast<ani_object>(result.callback)) &&
                env->FindNamespace(UNIFORM_DATA_STRUCT_NAMESPACE, &nameSpace) == ANI_OK &&
-               env->Namespace_FindFunction(nameSpace, functionName, nullptr, &function) == ANI_OK;
+               env->Namespace_FindFunction(nameSpace, functionName, nullptr, &result.function) == ANI_OK;
     }
 
     int32_t Invoke(const std::shared_ptr<Request> &request)
@@ -384,11 +389,10 @@ private:
 
     static int32_t ExecuteStat(ani_env *env, const std::shared_ptr<Request> &request)
     {
-        ani_function function = nullptr;
-        ani_ref callback = nullptr;
+        CallbackFunction callbackFunction;
         ani_string aniId = nullptr;
         ani_ref result = nullptr;
-        if (!FindCallbackFunction(env, request->providerRef, "onStat", "virtualFileOnStatFunc", callback, function)) {
+        if (!FindCallbackFunction(env, request->providerRef, "onStat", "virtualFileOnStatFunc", callbackFunction)) {
             LOG_ERROR(UDMF_ANI, "Find virtual entry stat callback failed");
             return -EIO;
         }
@@ -397,7 +401,7 @@ private:
             LOG_ERROR(UDMF_ANI, "Create virtual entry stat id failed, status=%{public}d", status);
             return -EIO;
         }
-        status = env->Function_Call_Ref(function, &result, callback, aniId);
+        status = env->Function_Call_Ref(callbackFunction.function, &result, callbackFunction.callback, aniId);
         if (status != ANI_OK) {
             LOG_ERROR(UDMF_ANI, "Invoke virtual entry stat callback failed, status=%{public}d", status);
             env->ResetError();
@@ -414,11 +418,10 @@ private:
 
     static int32_t ExecuteRead(ani_env *env, const std::shared_ptr<Request> &request)
     {
-        ani_function function = nullptr;
-        ani_ref callback = nullptr;
+        CallbackFunction callbackFunction;
         ani_string aniId = nullptr;
         ani_ref result = nullptr;
-        if (!FindCallbackFunction(env, request->providerRef, "onRead", "virtualFileOnReadFunc", callback, function)) {
+        if (!FindCallbackFunction(env, request->providerRef, "onRead", "virtualFileOnReadFunc", callbackFunction)) {
             LOG_ERROR(UDMF_ANI, "Find virtual entry read callback failed");
             return -EIO;
         }
@@ -427,7 +430,8 @@ private:
             LOG_ERROR(UDMF_ANI, "Create virtual entry read id failed, status=%{public}d", status);
             return -EIO;
         }
-        status = env->Function_Call_Ref(function, &result, callback, aniId, request->offset, request->length);
+        status = env->Function_Call_Ref(
+            callbackFunction.function, &result, callbackFunction.callback, aniId, request->offset, request->length);
         if (status != ANI_OK) {
             LOG_ERROR(UDMF_ANI, "Invoke virtual entry read callback failed, status=%{public}d", status);
             env->ResetError();
@@ -455,11 +459,9 @@ private:
         if (IsNullOrUndefined(env, static_cast<ani_object>(cancelCallback))) {
             return 0;
         }
-        ani_function function = nullptr;
-        ani_ref callback = nullptr;
+        CallbackFunction callbackFunction;
         ani_array aniIds = nullptr;
-        if (!FindCallbackFunction(
-            env, request->providerRef, "onCancel", "virtualFileOnCancelFunc", callback, function)) {
+        if (!FindCallbackFunction(env, request->providerRef, "onCancel", "virtualFileOnCancelFunc", callbackFunction)) {
             LOG_ERROR(UDMF_ANI, "Find virtual entry cancel callback failed");
             return -EIO;
         }
@@ -467,7 +469,7 @@ private:
             LOG_ERROR(UDMF_ANI, "Create virtual entry cancel id array failed");
             return -EIO;
         }
-        ani_status status = env->Function_Call_Void(function, callback, aniIds);
+        ani_status status = env->Function_Call_Void(callbackFunction.function, callbackFunction.callback, aniIds);
         if (status != ANI_OK) {
             LOG_ERROR(UDMF_ANI, "Invoke virtual entry cancel callback failed, status=%{public}d", status);
             env->ResetError();

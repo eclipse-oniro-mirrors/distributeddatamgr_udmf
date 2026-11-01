@@ -38,6 +38,8 @@ using namespace std;
 using namespace testing;
 
 namespace {
+constexpr int64_t TEST_FILE_SIZE = 7;
+
 class DummyProvider final : public IRemoteStub<IVirtualEntryProvider> {
 public:
     int32_t Stat(const std::string &, VirtualEntry &) override { return -ENOSYS; }
@@ -59,7 +61,7 @@ VirtualEntry MakeValidEntry()
     entry.id = "file-id";
     entry.name = "example.bin";
     entry.type = VirtualEntryType::FILE;
-    entry.size = 7;
+    entry.size = TEST_FILE_SIZE;
     return entry;
 }
 } // namespace
