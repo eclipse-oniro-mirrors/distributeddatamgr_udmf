@@ -63,14 +63,6 @@ static const std::map<Udmf_Intention, Intention> VAILD_INTENTIONS = {
     { UDMF_INTENTION_MENU, Intention::UD_INTENTION_MENU }
 };
 
-static int ConvertStatusToCError(int32_t status)
-{
-    if (status == E_OK) {
-        return UDMF_E_OK;
-    }
-    return status == E_INVALID_PARAMETERS ? UDMF_E_INVALID_PARAM : UDMF_ERR;
-}
-
 static void DestroyUnifiedRecordArray(OH_UdmfRecord**& records, unsigned int& count)
 {
     if (records == nullptr) {
@@ -550,7 +542,7 @@ int OH_Udmf_SetUnifiedData(Udmf_Intention intention, OH_UdmfData* unifiedData, c
     int32_t status = UdmfClient::GetInstance().SetData(option, *(unifiedData->unifiedData_), keyStr);
     if (status != E_OK) {
         LOG_ERROR(UDMF_CAPI, "Set data error, status = %{public}d", status);
-        return ConvertStatusToCError(status);
+        return UDMF_ERR;
     }
     if (strcpy_s(key, keyLen, keyStr.c_str()) != EOK) {
         LOG_ERROR(UDMF_CAPI, "String copy failed");
@@ -600,7 +592,7 @@ int OH_Udmf_SetUnifiedDataByOptions(OH_UdmfOptions* options, OH_UdmfData* unifie
     int32_t ret = UdmfClient::GetInstance().SetData(option, *(unifiedData->unifiedData_), keyStr);
     if (ret != E_OK) {
         LOG_ERROR(UDMF_CAPI, "Set data error, ret = %{public}d", ret);
-        return ConvertStatusToCError(ret);
+        return UDMF_ERR;
     }
     if (strcpy_s(key, keyLen, keyStr.c_str()) != E_OK) {
         LOG_ERROR(UDMF_CAPI, "String copy failed");

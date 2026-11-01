@@ -524,6 +524,41 @@ HWTEST_F(UDMFTest, UdmfTest006, TestSize.Level0)
 }
 
 /**
+ * @tc.name: SetUnifiedData_EmptyData_ReturnLegacyError
+ * @tc.desc: An allocated data handle with no records keeps the legacy C error code for drag.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UDMFTest, SetUnifiedData_EmptyData_ReturnLegacyError, TestSize.Level0)
+{
+    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> data(OH_UdmfData_Create(), OH_UdmfData_Destroy);
+    ASSERT_NE(data, nullptr);
+    char key[UDMF_KEY_BUFFER_LEN] = {};
+
+    EXPECT_EQ(OH_Udmf_SetUnifiedData(UDMF_INTENTION_DRAG, data.get(), key, sizeof(key)), UDMF_ERR);
+    EXPECT_EQ(OH_Udmf_SetUnifiedData(UDMF_INTENTION_DRAG, nullptr, key, sizeof(key)), UDMF_E_INVALID_PARAM);
+}
+
+/**
+ * @tc.name: SetUnifiedDataByOptions_EmptyData_ReturnLegacyError
+ * @tc.desc: Empty data in dataHub keeps the legacy error while a null options handle remains invalid.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UDMFTest, SetUnifiedDataByOptions_EmptyData_ReturnLegacyError, TestSize.Level0)
+{
+    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> data(OH_UdmfData_Create(), OH_UdmfData_Destroy);
+    ASSERT_NE(data, nullptr);
+    std::unique_ptr<OH_UdmfOptions, decltype(&OH_UdmfOptions_Destroy)> options(
+        OH_UdmfOptions_Create(), OH_UdmfOptions_Destroy);
+    ASSERT_NE(options, nullptr);
+    ASSERT_EQ(OH_UdmfOptions_SetIntention(options.get(), UDMF_INTENTION_DATA_HUB), UDMF_E_OK);
+    char key[UDMF_KEY_BUFFER_LEN] = {};
+
+    EXPECT_EQ(OH_Udmf_SetUnifiedDataByOptions(options.get(), data.get(), key, sizeof(key)), UDMF_ERR);
+    EXPECT_EQ(OH_Udmf_SetUnifiedDataByOptions(nullptr, data.get(), key, sizeof(key)), UDMF_E_INVALID_PARAM);
+}
+/**
  * @tc.name: OH_Udmf_GetUnifiedData001
  * @tc.desc: OH_Udmf_GetUnifiedData with invalid param
  * @tc.type: FUNC
