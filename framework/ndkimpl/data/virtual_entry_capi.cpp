@@ -212,7 +212,7 @@ public:
         }
         if (code == static_cast<uint32_t>(VirtualEntryProviderCode::CANCEL)) {
             std::vector<std::string> ids;
-            int32_t ret = request.ReadStringVector(&ids) ? Cancel(ids) : -EINVAL;
+            int32_t ret = (request.ReadStringVector(&ids) && !ids.empty()) ? Cancel(ids) : -EINVAL;
             return reply.WriteInt32(ret) ? 0 : -EIO;
         }
         return IRemoteStub<IVirtualEntryProvider>::OnRemoteRequest(code, request, reply, option);

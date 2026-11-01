@@ -546,7 +546,7 @@ int32_t VirtualEntryProviderNapi::HandleAsyncReadRequest(MessageParcel &request)
 int32_t VirtualEntryProviderNapi::HandleCancelRequest(MessageParcel &request, MessageParcel &reply)
 {
     std::vector<std::string> ids;
-    int32_t ret = request.ReadStringVector(&ids) ? Cancel(ids) : -EINVAL;
+    int32_t ret = (request.ReadStringVector(&ids) && !ids.empty()) ? Cancel(ids) : -EINVAL;
     return reply.WriteInt32(ret) ? 0 : -EIO;
 }
 } // namespace OHOS::UDMF
