@@ -27,13 +27,19 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "accesstoken_kit.h"
 #include "file.h"
+#include "nativetoken_kit.h"
+#include "token_setproc.h"
 #include "udmf_client.h"
 #include "udmf_err_code.h"
 #include "virtual_entry_attachment_registry.h"
 #include "virtual_entry_capi.h"
+#include "virtual_entry_provider_proxy.h"
+#include "virtual_entry_read_callback_stub.h"
 
 using namespace testing::ext;
+using namespace OHOS::Security::AccessToken;
 
 namespace OHOS::UDMF {
 namespace {
@@ -138,6 +144,27 @@ struct AttachmentOwner {
     {
         VirtualEntryAttachmentRegistry::Detach(this);
     }
+};
+
+void SetNativeToken(const std::string &processName)
+{
+    auto tokenId = AccessTokenKit::GetNativeTokenId(processName);
+    SetSelfTokenID(tokenId);
+}
+
+class StubReadCallback final : public VirtualEntryReadCallbackStub {
+public:
+    int32_t OnResult(int32_t status, const std::vector<uint8_t> &data) override
+    {
+        status_ = status;
+        bytes_ = data;
+        called_ = true;
+        return 0;
+    }
+
+    bool called_ = false;
+    int32_t status_ = -EIO;
+    std::vector<uint8_t> bytes_;
 };
 } // namespace
 
@@ -895,5 +922,218 @@ HWTEST_F(VirtualEntryCapiTest, SetVirtualEntry_ReplaceInfo_FinalizeEachContextOn
     EXPECT_EQ(secondContext.finalized, 0u);
     uri.reset();
     EXPECT_EQ(secondContext.finalized, 1u);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Stat_Dispatch_PreservesEntry
+ * @tc.desc: Verify the NDK provider IPC stub dispatches STAT and returns entry metadata.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Stat_Dispatch_PreservesEntry, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    VirtualEntryProviderProxy proxy(provider_->AsObject());
+    VirtualEntry entry;
+    EXPECT_EQ(proxy.Stat("file-id", entry), 0);
+    EXPECT_EQ(entry.id, "file-id");
+    EXPECT_EQ(entry.name, "example.bin");
+    EXPECT_EQ(entry.size, TEST_FILE_SIZE);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Stat_MalformedParcel_ReturnsErrorInReply
+ * @tc.desc: Verify a STAT request with a truncated parcel reports an error status in the reply.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Stat_MalformedParcel_ReturnsErrorInReply, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    MessageParcel request;
+    MessageParcel reply;
+    MessageOption option;
+    ASSERT_TRUE(request.WriteInterfaceToken(IVirtualEntryProvider::GetDescriptor()));
+    EXPECT_EQ(provider_->AsObject()->SendRequest(
+        static_cast<uint32_t>(VirtualEntryProviderCode::STAT), request, reply, option), 0);
+    EXPECT_EQ(reply.ReadInt32(), -EINVAL);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Read_Dispatch_ReturnsBytes
+ * @tc.desc: Verify the NDK provider IPC stub dispatches READ and returns content via ashmem.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Read_Dispatch_ReturnsBytes, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    VirtualEntryProviderProxy proxy(provider_->AsObject());
+    std::vector<uint8_t> bytes;
+    EXPECT_EQ(proxy.Read("file-id", 0, TEST_FILE_SIZE, bytes), 0);
+    EXPECT_EQ(bytes, context_.content);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Read_ProviderFailure_PropagatesError
+ * @tc.desc: Verify a READ request whose callback fails propagates the error through the stub.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Read_ProviderFailure_PropagatesError, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    context_.readStatus = UDMF_ERR;
+    VirtualEntryProviderProxy proxy(provider_->AsObject());
+    std::vector<uint8_t> bytes;
+    EXPECT_EQ(proxy.Read("file-id", 0, TEST_FILE_SIZE, bytes), -EIO);
+    context_.readStatus = UDMF_E_OK;
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Read_EmptyBytes_OmitsAshmem
+ * @tc.desc: Verify a READ request returning zero bytes omits the ashmem payload.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Read_EmptyBytes_OmitsAshmem, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    VirtualEntryProviderProxy proxy(provider_->AsObject());
+    std::vector<uint8_t> bytes;
+    EXPECT_EQ(proxy.Read("file-id", TEST_FILE_SIZE, 1, bytes), 0);
+    EXPECT_TRUE(bytes.empty());
+}
+
+/**
+ * @tc.name: OnRemoteRequest_ReadAsync_Dispatch_DeliversCallback
+ * @tc.desc: Verify the NDK provider IPC stub dispatches READ_ASYNC and delivers the callback.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_ReadAsync_Dispatch_DeliversCallback, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    VirtualEntryProviderProxy proxy(provider_->AsObject());
+    sptr<StubReadCallback> callback = new StubReadCallback();
+    EXPECT_EQ(proxy.ReadAsync("file-id", 0, TEST_FILE_SIZE, callback->AsObject()), 0);
+    EXPECT_TRUE(callback->called_);
+    EXPECT_EQ(callback->status_, 0);
+    EXPECT_EQ(callback->bytes_, context_.content);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_ReadAsync_MissingCallback_ReturnsEINVAL
+ * @tc.desc: Verify a READ_ASYNC request without a callback object is rejected.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_ReadAsync_MissingCallback_ReturnsEINVAL, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    MessageParcel request;
+    MessageParcel reply;
+    MessageOption option;
+    ASSERT_TRUE(request.WriteInterfaceToken(IVirtualEntryProvider::GetDescriptor()));
+    ASSERT_TRUE(request.WriteString("file-id"));
+    ASSERT_TRUE(request.WriteInt64(0));
+    ASSERT_TRUE(request.WriteInt32(TEST_FILE_SIZE));
+    EXPECT_EQ(provider_->AsObject()->SendRequest(
+        static_cast<uint32_t>(VirtualEntryProviderCode::READ_ASYNC), request, reply, option), -EINVAL);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Cancel_Dispatch_ReturnsStatus
+ * @tc.desc: Verify the NDK provider IPC stub dispatches CANCEL and returns success.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Cancel_Dispatch_ReturnsStatus, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    VirtualEntryProviderProxy proxy(provider_->AsObject());
+    EXPECT_EQ(proxy.Cancel({ "file-id" }), 0);
+    EXPECT_EQ(context_.canceledIds, (std::vector<std::string>{ "file-id" }));
+}
+
+/**
+ * @tc.name: OnRemoteRequest_Cancel_MalformedParcel_ReturnsErrorInReply
+ * @tc.desc: Verify a CANCEL request with a truncated parcel reports an error status in the reply.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_Cancel_MalformedParcel_ReturnsErrorInReply, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    MessageParcel request;
+    MessageParcel reply;
+    MessageOption option;
+    ASSERT_TRUE(request.WriteInterfaceToken(IVirtualEntryProvider::GetDescriptor()));
+    EXPECT_EQ(provider_->AsObject()->SendRequest(
+        static_cast<uint32_t>(VirtualEntryProviderCode::CANCEL), request, reply, option), 0);
+    EXPECT_EQ(reply.ReadInt32(), -EINVAL);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_UnknownCode_DelegatesToBase
+ * @tc.desc: Verify an unsupported transaction code is delegated to the base stub.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_UnknownCode_DelegatesToBase, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    MessageParcel request;
+    MessageParcel reply;
+    MessageOption option;
+    ASSERT_TRUE(request.WriteInterfaceToken(IVirtualEntryProvider::GetDescriptor()));
+    EXPECT_NE(provider_->AsObject()->SendRequest(0xFFFF, request, reply, option), 0);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_WrongToken_ReturnsEACCES
+ * @tc.desc: Verify a request with a wrong interface descriptor is rejected.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_WrongToken_ReturnsEACCES, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetNativeToken("distributeddata");
+    MessageParcel request;
+    MessageParcel reply;
+    MessageOption option;
+    ASSERT_TRUE(request.WriteInterfaceToken(u"ohos.udmf.WrongDescriptor"));
+    EXPECT_EQ(provider_->AsObject()->SendRequest(
+        static_cast<uint32_t>(VirtualEntryProviderCode::STAT), request, reply, option), -EACCES);
+}
+
+/**
+ * @tc.name: OnRemoteRequest_NonNativeToken_ReturnsEACCES
+ * @tc.desc: Verify a request without a native calling token is rejected.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryCapiTest, OnRemoteRequest_NonNativeToken_ReturnsEACCES, TestSize.Level0)
+{
+    ASSERT_NE(provider_, nullptr);
+    SetSelfTokenID(0);
+    MessageParcel request;
+    MessageParcel reply;
+    MessageOption option;
+    ASSERT_TRUE(request.WriteInterfaceToken(IVirtualEntryProvider::GetDescriptor()));
+    EXPECT_EQ(provider_->AsObject()->SendRequest(
+        static_cast<uint32_t>(VirtualEntryProviderCode::STAT), request, reply, option), -EACCES);
+    SetNativeToken("distributeddata");
 }
 } // namespace OHOS::UDMF

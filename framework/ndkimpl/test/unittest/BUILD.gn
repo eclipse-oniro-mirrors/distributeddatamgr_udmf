@@ -163,6 +163,7 @@ ohos_unittest("UdmfTest") {
   sources = udmf_test_impl_sources + [
               "udmf_test.cpp",
               "virtual_entry_capi_test.cpp",
+              "virtual_entry_service_proxy_test.cpp",
             ]
 
   configs = [ ":module_private_config" ]
