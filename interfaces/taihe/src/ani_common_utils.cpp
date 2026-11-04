@@ -543,8 +543,18 @@ ani_status GetUint8Array(ani_env *env, ani_object in, std::vector<uint8_t> &out)
         LOG_ERROR(UDMF_ANI, "ArrayBuffer_GetInfo fail, status:%{public}d", status);
         return status;
     }
-    if (dataLen > 0) {
-        out = std::vector<uint8_t>(reinterpret_cast<uint8_t *>(data), reinterpret_cast<uint8_t *>(data) + dataLen);
+    if (len < 0 || byteOffSet < 0 || static_cast<ani_size>(byteOffSet) > dataLen ||
+        static_cast<ani_size>(len) > dataLen - static_cast<ani_size>(byteOffSet)) {
+        LOG_ERROR(UDMF_ANI,
+            "Invalid Uint8Array range, byteLength:%{public}d, byteOffset:%{public}d, bufferLength:%{public}zu",
+            len, byteOffSet, dataLen);
+        return ANI_OUT_OF_RANGE;
+    }
+    if (len > 0) {
+        auto *begin = reinterpret_cast<uint8_t *>(data) + byteOffSet;
+        out = std::vector<uint8_t>(begin, begin + len);
+    } else {
+        out.clear();
     }
     return ANI_OK;
 }

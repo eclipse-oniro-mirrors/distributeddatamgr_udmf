@@ -81,6 +81,9 @@
           "name": "//foundation/distributeddatamgr/udmf/interfaces/innerkits:udmf_core"
         },
         {
+          "name": "//foundation/distributeddatamgr/udmf/interfaces/innerkits:virtual_entry_provider_proxy"
+        },
+        {
           "name": "//foundation/distributeddatamgr/udmf/interfaces/innerkits:udmf_client",
           "header": {
             "header_files": [

@@ -47,6 +47,30 @@ using namespace OHOS::UDMF;
 namespace OHOS::Test {
 static constexpr uint64_t MAX_TYPES_COUNT = 10 * 1024;
 static constexpr const char *TEST_DATA = "/data/utd/destUri";
+
+static int ReadVirtualEntry(
+    void *context, const char *id, int64_t offset, uint32_t length, uint8_t *data, uint32_t *bytesRead)
+{
+    (void)context;
+    (void)id;
+    (void)offset;
+    (void)length;
+    (void)data;
+    if (bytesRead == nullptr) {
+        return UDMF_E_INVALID_PARAM;
+    }
+    *bytesRead = 0;
+    return UDMF_E_OK;
+}
+
+static int CancelVirtualEntry(void *context, const char *const *idList, uint32_t count)
+{
+    (void)context;
+    (void)idList;
+    (void)count;
+    return UDMF_E_OK;
+}
+
 class UDMFTest : public testing::Test {
 public:
     static void SetUpTestCase(void);
@@ -499,6 +523,41 @@ HWTEST_F(UDMFTest, UdmfTest006, TestSize.Level0)
     OH_UdmfData_Destroy(unifiedData1);
 }
 
+/**
+ * @tc.name: SetUnifiedData_EmptyData_ReturnLegacyError
+ * @tc.desc: An allocated data handle with no records keeps the legacy C error code for drag.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UDMFTest, SetUnifiedData_EmptyData_ReturnLegacyError, TestSize.Level0)
+{
+    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> data(OH_UdmfData_Create(), OH_UdmfData_Destroy);
+    ASSERT_NE(data, nullptr);
+    char key[UDMF_KEY_BUFFER_LEN] = {};
+
+    EXPECT_EQ(OH_Udmf_SetUnifiedData(UDMF_INTENTION_DRAG, data.get(), key, sizeof(key)), UDMF_ERR);
+    EXPECT_EQ(OH_Udmf_SetUnifiedData(UDMF_INTENTION_DRAG, nullptr, key, sizeof(key)), UDMF_E_INVALID_PARAM);
+}
+
+/**
+ * @tc.name: SetUnifiedDataByOptions_EmptyData_ReturnLegacyError
+ * @tc.desc: Empty data in dataHub keeps the legacy error while a null options handle remains invalid.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UDMFTest, SetUnifiedDataByOptions_EmptyData_ReturnLegacyError, TestSize.Level0)
+{
+    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> data(OH_UdmfData_Create(), OH_UdmfData_Destroy);
+    ASSERT_NE(data, nullptr);
+    std::unique_ptr<OH_UdmfOptions, decltype(&OH_UdmfOptions_Destroy)> options(
+        OH_UdmfOptions_Create(), OH_UdmfOptions_Destroy);
+    ASSERT_NE(options, nullptr);
+    ASSERT_EQ(OH_UdmfOptions_SetIntention(options.get(), UDMF_INTENTION_DATA_HUB), UDMF_E_OK);
+    char key[UDMF_KEY_BUFFER_LEN] = {};
+
+    EXPECT_EQ(OH_Udmf_SetUnifiedDataByOptions(options.get(), data.get(), key, sizeof(key)), UDMF_ERR);
+    EXPECT_EQ(OH_Udmf_SetUnifiedDataByOptions(nullptr, data.get(), key, sizeof(key)), UDMF_E_INVALID_PARAM);
+}
 /**
  * @tc.name: OH_Udmf_GetUnifiedData001
  * @tc.desc: OH_Udmf_GetUnifiedData with invalid param
@@ -4898,4 +4957,37 @@ HWTEST_F(UDMFTest, OH_UDMF_Summary_Repopulate_001, TestSize.Level1)
  
     OH_UDMF_DestroySummary(summary);
 }
+
+/**
+ * @tc.name: OH_UdmfRecord_AddVirtualFileUri_001
+ * @tc.desc: Attach a virtual file provider to the primary file record
+ * @tc.type: FUNC
+ */
+HWTEST_F(UDMFTest, OH_UdmfRecord_AddVirtualFileUri_001, TestSize.Level1)
+{
+    auto item = OH_UDMF_CreateVirtualFileItem("example.bin", "file-id", 100);
+    ASSERT_NE(item, nullptr);
+    ASSERT_EQ(OH_UDMF_SetVirtualFileSize(item, 1024), UDMF_E_OK);
+    OH_UDMF_VirtualFileCallbacks callbacks{};
+    callbacks.structSize = sizeof(OH_UDMF_VirtualFileCallbacks);
+    callbacks.onRead = ReadVirtualEntry;
+    callbacks.onCancel = CancelVirtualEntry;
+    auto info = OH_UDMF_CreateVirtualFileInfo(item, &callbacks, nullptr, nullptr);
+    auto fileUri = OH_UdsFileUri_Create();
+    auto record = OH_UdmfRecord_Create();
+    ASSERT_NE(info, nullptr);
+    ASSERT_NE(fileUri, nullptr);
+    ASSERT_NE(record, nullptr);
+    ASSERT_EQ(OH_UDMF_SetFileUriVirtualEntry(fileUri, info), UDMF_E_OK);
+
+    EXPECT_EQ(OH_UdmfRecord_AddFileUri(record, fileUri), UDMF_E_OK);
+    ASSERT_NE(record->record_, nullptr);
+    EXPECT_EQ(record->record_->GetType(), UDType::FILE);
+    EXPECT_EQ(OH_UdmfRecord_AddFileUri(record, fileUri), UDMF_E_INVALID_PARAM);
+
+    OH_UdmfRecord_Destroy(record);
+    OH_UdsFileUri_Destroy(fileUri);
+    OH_UDMF_DestroyVirtualFileInfo(info);
+    OH_UDMF_DestroyVirtualItem(item);
 }
+} // namespace OHOS::Test

@@ -52,6 +52,8 @@ public:
     int32_t PushDelayData(const std::string &key, UnifiedData &unifiedData, Summary &summary) override;
     int32_t GetDataIfAvailable(const std::string &key, const DataLoadInfo &dataLoadInfo,
         sptr<IRemoteObject> iUdmfNotifier, std::shared_ptr<UnifiedData> unifiedData) override;
+    int32_t RegisterVirtualEntry(const std::string &key, uint32_t recordIndex, const VirtualEntry &entry,
+        sptr<IRemoteObject> provider) override;
 
 private:
     using AuditReporter = std::function<void(const UnifiedData &)>;

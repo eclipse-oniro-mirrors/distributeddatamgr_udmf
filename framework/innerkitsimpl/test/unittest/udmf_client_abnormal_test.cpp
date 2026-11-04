@@ -19,11 +19,16 @@
 #include <gmock/gmock.h>
 #include <string>
 
+#include "file.h"
+#include "iremote_stub.h"
 #include "logger.h"
 #include "udmf_async_client.h"
 #include "udmf_capi_common.h"
 #include "udmf_client.h"
 #include "udmf_service_client_mock.h"
+#include "virtual_entry.h"
+#include "virtual_entry_attachment_registry.h"
+#include "virtual_entry_provider.h"
 
 using namespace testing::ext;
 using namespace OHOS::UDMF;
@@ -31,6 +36,35 @@ using namespace OHOS;
 namespace OHOS::Test {
 using namespace std;
 using namespace testing;
+
+namespace {
+constexpr int64_t TEST_FILE_SIZE = 7;
+
+class DummyProvider final : public IRemoteStub<IVirtualEntryProvider> {
+public:
+    int32_t Stat(const std::string &, VirtualEntry &) override { return -ENOSYS; }
+    int32_t Read(const std::string &, int64_t, int32_t, std::vector<uint8_t> &) override { return -ENOSYS; }
+    int32_t Cancel(const std::vector<std::string> &) override { return -ENOSYS; }
+    int32_t OnRemoteRequest(uint32_t, MessageParcel &, MessageParcel &, MessageOption &) override { return 0; }
+};
+
+struct AttachmentOwner {
+    ~AttachmentOwner()
+    {
+        VirtualEntryAttachmentRegistry::Detach(this);
+    }
+};
+
+VirtualEntry MakeValidEntry()
+{
+    VirtualEntry entry;
+    entry.id = "file-id";
+    entry.name = "example.bin";
+    entry.type = VirtualEntryType::FILE;
+    entry.size = TEST_FILE_SIZE;
+    return entry;
+}
+} // namespace
 
 class UdmfClientAbnormalTest : public testing::Test {
 public:
@@ -270,5 +304,235 @@ HWTEST_F(UdmfClientAbnormalTest, RemoveAppShareOption001, TestSize.Level1)
     Status ret = client.RemoveAppShareOption(intention);
     EXPECT_EQ(ret, Status::E_IPC);
     LOG_INFO(UDMF_TEST, "RemoveAppShareOption001 end.");
+}
+
+/**
+ * @tc.name: SetData_DragInAppNoVirtualEntry_ProcessesInApp
+ * @tc.desc: Verify in-app drag without a virtual entry is processed locally and returns success.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragInAppNoVirtualEntry_ProcessesInApp, TestSize.Level1)
+{
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::IN_APP)), Return(E_OK)));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_OK);
+    EXPECT_FALSE(key.empty());
+}
+
+/**
+ * @tc.name: SetData_DragInAppWithVirtualEntry_ReturnsInvalidParameters
+ * @tc.desc: Verify in-app drag with a virtual entry is rejected.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragInAppWithVirtualEntry_ReturnsInvalidParameters, TestSize.Level1)
+{
+    auto file = std::make_shared<File>();
+    AttachmentOwner owner;
+    sptr<DummyProvider> provider = new DummyProvider();
+    ASSERT_TRUE(VirtualEntryAttachmentRegistry::Attach(file, MakeValidEntry(), provider->AsObject(), &owner));
+
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::IN_APP)), Return(E_OK)));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    unifiedData.AddRecord(file);
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_INVALID_PARAMETERS);
+}
+
+/**
+ * @tc.name: SetData_DragNotInApp_ProceedsToService
+ * @tc.desc: Verify cross-device drag delegates to the service SetData.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragNotInApp_ProceedsToService, TestSize.Level1)
+{
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_OK));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_OK);
+}
+
+/**
+ * @tc.name: SetData_DragGetShareOptionError_ReturnsError
+ * @tc.desc: Verify a GetAppShareOption error (not E_NOT_FOUND) is propagated.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragGetShareOptionError_ReturnsError, TestSize.Level1)
+{
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _)).WillOnce(Return(E_ERROR));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_ERROR);
+}
+
+/**
+ * @tc.name: SetData_DragGetShareOptionNotFound_ProceedsToService
+ * @tc.desc: Verify E_NOT_FOUND from GetAppShareOption allows the request to proceed.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragGetShareOptionNotFound_ProceedsToService, TestSize.Level1)
+{
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _)).WillOnce(Return(E_NOT_FOUND));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_OK));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_OK);
+}
+
+/**
+ * @tc.name: SetData_DragVirtualEntry_SetDataSuccessRegisterSuccess_ReturnsOk
+ * @tc.desc: Verify a cross-device drag with a virtual entry registers the provider after SetData.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_SetDataSuccessRegisterSuccess_ReturnsOk, TestSize.Level1)
+{
+    auto file = std::make_shared<File>();
+    AttachmentOwner owner;
+    sptr<DummyProvider> provider = new DummyProvider();
+    ASSERT_TRUE(VirtualEntryAttachmentRegistry::Attach(file, MakeValidEntry(), provider->AsObject(), &owner));
+
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_OK));
+    EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).WillOnce(Return(E_OK));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    unifiedData.AddRecord(file);
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_OK);
+}
+
+/**
+ * @tc.name: SetData_DragVirtualEntry_RegisterFailure_RollsBackDeleteData
+ * @tc.desc: Verify a failed RegisterVirtualEntry triggers a DeleteData rollback.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_RollsBackDeleteData, TestSize.Level1)
+{
+    auto file = std::make_shared<File>();
+    AttachmentOwner owner;
+    sptr<DummyProvider> provider = new DummyProvider();
+    ASSERT_TRUE(VirtualEntryAttachmentRegistry::Attach(file, MakeValidEntry(), provider->AsObject(), &owner));
+
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_OK));
+    EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).WillOnce(Return(E_ERROR));
+    EXPECT_CALL(*mock_, DeleteData(_, _)).WillOnce(Return(E_OK));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    unifiedData.AddRecord(file);
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_ERROR);
+}
+
+/**
+ * @tc.name: SetData_DragVirtualEntry_SetDataFailure_SkipsRegistration
+ * @tc.desc: Verify a failed SetData skips RegisterVirtualEntry.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_SetDataFailure_SkipsRegistration, TestSize.Level1)
+{
+    auto file = std::make_shared<File>();
+    AttachmentOwner owner;
+    sptr<DummyProvider> provider = new DummyProvider();
+    ASSERT_TRUE(VirtualEntryAttachmentRegistry::Attach(file, MakeValidEntry(), provider->AsObject(), &owner));
+
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_ERROR));
+    EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).Times(0);
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    unifiedData.AddRecord(file);
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_ERROR);
+}
+
+/**
+ * @tc.name: SetData_NonDragNoVirtualEntry_SetDataSuccess_ReturnsOk
+ * @tc.desc: Verify non-drag data without a virtual entry delegates to the service.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_NonDragNoVirtualEntry_SetDataSuccess_ReturnsOk, TestSize.Level1)
+{
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_OK));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DATA_HUB;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_OK);
+}
+
+/**
+ * @tc.name: SetData_NonDragNoVirtualEntry_SetDataFailure_ReturnsError
+ * @tc.desc: Verify a service SetData failure is propagated for non-drag data.
+ * @tc.type: FUNC
+ */
+HWTEST_F(UdmfClientAbnormalTest, SetData_NonDragNoVirtualEntry_SetDataFailure_ReturnsError, TestSize.Level1)
+{
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_ERROR));
+
+    UdmfClient client;
+    UnifiedData unifiedData;
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DATA_HUB;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_ERROR);
 }
 } // OHOS::Test

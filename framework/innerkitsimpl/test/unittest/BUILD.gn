@@ -249,6 +249,12 @@ ohos_unittest("UdmfAsyncClientTest") {
 ohos_unittest("UdmfDelayDataTest") {
   module_out_path = module_output_path
 
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
   sources = udmf_test_impl_sources + [ "udmf_delay_data_test.cpp" ]
 
   configs = [ ":module_private_config" ]
@@ -1167,6 +1173,25 @@ ohos_unittest("UnifiedHtmlRecordProcessTest") {
   cflags = [ "-Werror=vla" ]
 }
 
+ohos_unittest("VirtualEntryProviderProxyTest") {
+  module_out_path = module_output_path
+
+  sources = [
+    "virtual_entry_provider_proxy_test.cpp",
+    "virtual_entry_size_test.cpp",
+  ]
+
+  configs = [ ":module_private_config" ]
+
+  deps = [ "${udmf_interfaces_path}/innerkits:virtual_entry_provider_proxy" ]
+
+  external_deps = [
+    "c_utils:utils",
+    "googletest:gtest_main",
+    "ipc:ipc_core",
+  ]
+}
+
 ###############################################################################
 group("unittest") {
   testonly = true
@@ -1213,6 +1238,7 @@ group("unittest") {
     ":UtdDynamicUpdateTest",
     ":UtdNotifierTest",
     ":VideoTest",
+    ":VirtualEntryProviderProxyTest",
   ]
 }
 ###############################################################################

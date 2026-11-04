@@ -15,7 +15,11 @@
 #define LOG_TAG "UdmfClient"
 #include "udmf_client.h"
 
+#include <mutex>
+#include <unordered_map>
+
 #include "dds_trace.h"
+#include "file.h"
 #include "udmf_conversion.h"
 #include "udmf_radar_reporter.h"
 
@@ -27,6 +31,7 @@
 #include "udmf_notifier_stub.h"
 #include "unified_data_helper.h"
 #include "utd_client.h"
+#include "virtual_entry_attachment_registry.h"
 
 namespace OHOS {
 namespace UDMF {
@@ -37,6 +42,104 @@ static constexpr int FILE_TYPES_MAX_SIZE = 1024;
 static constexpr std::initializer_list<std::string_view> FILE_TOP_TYPES = { "general.file-uri", "general.file" };
 using namespace OHOS::DistributedDataDfx;
 using namespace RadarReporter;
+namespace {
+struct VirtualEntryAttachment {
+    VirtualEntry entry;
+    std::weak_ptr<File> owner;
+    sptr<IRemoteObject> provider;
+    const void *ownerContext = nullptr;
+};
+
+struct VirtualEntryRegistration {
+    VirtualEntry entry;
+    std::shared_ptr<File> file;
+    sptr<IRemoteObject> provider;
+    uint32_t recordIndex = 0;
+    bool found = false;
+};
+
+std::mutex g_virtualEntryMutex;
+std::unordered_map<const File *, VirtualEntryAttachment> g_virtualEntrySources;
+
+void PurgeExpiredVirtualEntries()
+{
+    for (auto it = g_virtualEntrySources.begin(); it != g_virtualEntrySources.end();) {
+        if (it->second.owner.expired()) {
+            it = g_virtualEntrySources.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool IsFileRecord(UDType type)
+{
+    return type == UDType::FILE || type == UDType::IMAGE || type == UDType::VIDEO || type == UDType::AUDIO ||
+           type == UDType::FOLDER;
+}
+
+Status FindVirtualEntryRegistration(const UnifiedData &data, VirtualEntryRegistration &registration)
+{
+    uint32_t providerCount = 0;
+    uint32_t recordIndex = 0;
+    std::lock_guard<std::mutex> lock(g_virtualEntryMutex);
+    if (g_virtualEntrySources.empty()) {
+        return E_OK;
+    }
+    for (const auto &record : data.GetRecords()) {
+        auto file = record != nullptr && IsFileRecord(record->GetType()) ? std::static_pointer_cast<File>(record)
+                                                                         : nullptr;
+        if (file != nullptr) {
+            auto source = g_virtualEntrySources.find(file.get());
+            auto owner = source == g_virtualEntrySources.end() ? nullptr : source->second.owner.lock();
+            if (owner == file && source->second.provider != nullptr) {
+                ++providerCount;
+                registration = { source->second.entry, file, source->second.provider, recordIndex, true };
+            } else if (source != g_virtualEntrySources.end() && owner == nullptr) {
+                g_virtualEntrySources.erase(source);
+            }
+        }
+        ++recordIndex;
+    }
+    return providerCount <= 1 ? E_OK : E_INVALID_PARAMETERS;
+}
+
+Status RegisterVirtualEntryOrRollback(const std::shared_ptr<UdmfServiceClient> &service,
+    const CustomOption &option, const std::string &key, const VirtualEntryRegistration &registration)
+{
+    auto status = static_cast<Status>(service->RegisterVirtualEntry(
+        key, registration.recordIndex, registration.entry, registration.provider));
+    if (status != E_OK) {
+        QueryOption rollback { .key = key, .intention = option.intention };
+        std::vector<UnifiedData> ignored;
+        (void)service->DeleteData(rollback, ignored);
+    }
+    return status;
+}
+
+Status SetDataToService(const std::shared_ptr<UdmfServiceClient> &service, CustomOption &option,
+    UnifiedData &unifiedData, std::string &key, const VirtualEntryRegistration &registration)
+{
+    UDDetails originalDetails;
+    if (registration.found) {
+        originalDetails = registration.file->GetDetails();
+        auto markedDetails = originalDetails;
+        markedDetails[VIRTUAL_ENTRY_FLAG] = true;
+        registration.file->SetDetails(markedDetails);
+    }
+    Summary summary;
+    UnifiedDataHelper::GetSummary(unifiedData, summary);
+    auto status = static_cast<Status>(service->SetData(option, unifiedData, summary, key));
+    if (registration.found) {
+        registration.file->SetDetails(originalDetails);
+    }
+    if (status != E_OK || !registration.found) {
+        return status;
+    }
+    return RegisterVirtualEntryOrRollback(service, option, key, registration);
+}
+} // namespace
+
 UdmfClient &UdmfClient::GetInstance()
 {
     static UdmfClient instance;
@@ -55,6 +158,32 @@ void UdmfClient::ProcessDragIfInApp(UnifiedData &unifiedData, std::string &inten
         BizScene::SET_DATA, SetDataStage::SET_DATA_END, StageRes::SUCCESS, BizState::DFX_END);
 }
 
+Status UdmfClient::ProcessDragData(const CustomOption &option, UnifiedData &unifiedData, std::string &key,
+    bool hasVirtualEntry, bool &isFinished)
+{
+    isFinished = false;
+    if (option.intention != UD_INTENTION_DRAG) {
+        return E_OK;
+    }
+    ShareOptions shareOption = SHARE_OPTIONS_BUTT;
+    auto intentionDrag = UD_INTENTION_MAP.at(option.intention);
+    auto status = GetAppShareOption(intentionDrag, shareOption);
+    if (status != E_NOT_FOUND && status != E_OK) {
+        LOG_ERROR(UDMF_CLIENT, "get appShareOption fail, intention:%{public}s", intentionDrag.c_str());
+        return status;
+    }
+    if (shareOption != ShareOptions::IN_APP) {
+        return E_OK;
+    }
+    if (hasVirtualEntry) {
+        LOG_ERROR(UDMF_CLIENT, "Virtual entry is not supported for in-app drag");
+        return E_INVALID_PARAMETERS;
+    }
+    ProcessDragIfInApp(unifiedData, intentionDrag, key);
+    isFinished = true;
+    return E_OK;
+}
+
 Status UdmfClient::SetData(CustomOption &option, UnifiedData &unifiedData, std::string &key)
 {
     DdsTrace trace(
@@ -63,6 +192,16 @@ Status UdmfClient::SetData(CustomOption &option, UnifiedData &unifiedData, std::
         BizScene::SET_DATA, SetDataStage::SET_DATA_BEGIN, StageRes::IDLE, BizState::DFX_BEGIN);
     if (!UnifiedDataUtils::IsValidIntention(option.intention)) {
         LOG_ERROR(UDMF_SERVICE, "Invalid intention");
+        return E_INVALID_PARAMETERS;
+    }
+    VirtualEntryRegistration registration;
+    auto registrationStatus = FindVirtualEntryRegistration(unifiedData, registration);
+    if (registrationStatus != E_OK) {
+        LOG_ERROR(UDMF_CLIENT, "Only one virtual entry provider is supported");
+        return registrationStatus;
+    }
+    if (registration.found && option.intention != UD_INTENTION_DRAG) {
+        LOG_ERROR(UDMF_CLIENT, "Virtual entry is supported only for drag data");
         return E_INVALID_PARAMETERS;
     }
     auto service = UdmfServiceClient::GetInstance();
@@ -74,29 +213,19 @@ Status UdmfClient::SetData(CustomOption &option, UnifiedData &unifiedData, std::
     }
     RadarReporterAdapter::ReportNormal(std::string(__FUNCTION__),
         BizScene::SET_DATA, SetDataStage::SET_DATA_BEGIN, StageRes::SUCCESS);
-    if (option.intention == UD_INTENTION_DRAG) {
-        ShareOptions shareOption = SHARE_OPTIONS_BUTT;
-        auto intentionDrag = UD_INTENTION_MAP.at(option.intention);
-        auto status = GetAppShareOption(intentionDrag, shareOption);
-        if (status != E_NOT_FOUND && status != E_OK) {
-            RadarReporterAdapter::ReportFail(std::string(__FUNCTION__),
-                BizScene::SET_DATA, SetDataStage::SET_DATA_END, StageRes::FAILED, status, BizState::DFX_END);
-            LOG_ERROR(UDMF_CLIENT, "get appShareOption fail, intention:%{public}s", intentionDrag.c_str());
-            return static_cast<Status>(status);
-        }
-        if (shareOption == ShareOptions::IN_APP) {
-            ProcessDragIfInApp(unifiedData, intentionDrag, key);
-            return E_OK;
-        }
+    bool isFinished = false;
+    auto status = ProcessDragData(option, unifiedData, key, registration.found, isFinished);
+    if (status == E_OK && !isFinished) {
+        status = SetDataToService(service, option, unifiedData, key, registration);
     }
-    Summary summary;
-    UnifiedDataHelper::GetSummary(unifiedData, summary);
-    int32_t ret = service->SetData(option, unifiedData, summary, key);
-    if (ret != E_OK) {
+    if (status != E_OK) {
         RadarReporterAdapter::ReportFail(std::string(__FUNCTION__),
-            BizScene::SET_DATA, SetDataStage::SET_DATA_END, StageRes::FAILED, ret, BizState::DFX_END);
-        LOG_ERROR(UDMF_CLIENT, "failed! ret = %{public}d", ret);
-        return static_cast<Status>(ret);
+            BizScene::SET_DATA, SetDataStage::SET_DATA_END, StageRes::FAILED, status, BizState::DFX_END);
+        LOG_ERROR(UDMF_CLIENT, "Set data failed! ret = %{public}d", status);
+        return status;
+    }
+    if (isFinished) {
+        return E_OK;
     }
     RadarReporterAdapter::ReportNormal(std::string(__FUNCTION__),
         BizScene::SET_DATA, SetDataStage::SET_DATA_END, StageRes::SUCCESS, BizState::DFX_END);
@@ -134,6 +263,30 @@ Status UdmfClient::GetData(const QueryOption &query, UnifiedData &unifiedData)
     RadarReporterAdapter::ReportNormal(std::string(__FUNCTION__),
         BizScene::GET_DATA, GetDataStage::GET_DATA_END, StageRes::SUCCESS, BizState::DFX_END);
     return E_OK;
+}
+
+bool VirtualEntryAttachmentRegistry::Attach(const std::shared_ptr<File> &file, const VirtualEntry &entry,
+    const sptr<IRemoteObject> &provider, const void *owner)
+{
+    if (file == nullptr || provider == nullptr || owner == nullptr || !entry.HasValidFileSizes()) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(g_virtualEntryMutex);
+    PurgeExpiredVirtualEntries();
+    g_virtualEntrySources[file.get()] = { entry, file, provider, owner };
+    return true;
+}
+
+void VirtualEntryAttachmentRegistry::Detach(const void *owner)
+{
+    std::lock_guard<std::mutex> lock(g_virtualEntryMutex);
+    for (auto it = g_virtualEntrySources.begin(); it != g_virtualEntrySources.end();) {
+        if (it->second.ownerContext == owner) {
+            it = g_virtualEntrySources.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 Status UdmfClient::GetBatchData(const QueryOption &query, std::vector<UnifiedData> &unifiedDataSet)

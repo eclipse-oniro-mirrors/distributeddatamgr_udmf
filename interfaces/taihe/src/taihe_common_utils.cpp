@@ -960,7 +960,9 @@ std::shared_ptr<Object> ConvertForm(::taiheStruct::Form &form)
         uriAuthorizationPoliciesOpt = ::taihe::optional<::taihe::array<int32_t>>::make(
             ::taihe::array<int32_t>(::taihe::copy_data, policies.data(), policies.size()));
     }
+    ::taihe::optional<uintptr_t> virtualEntryOpt;
     ::ohos::data::uniformDataStruct::FileUri fileUri = ::ohos::data::uniformDataStruct::FileUri {
+        std::move(virtualEntryOpt),
         std::move(thType),
         std::move(thOriUri),
         std::move(thFileType),

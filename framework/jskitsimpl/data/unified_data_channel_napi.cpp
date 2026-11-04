@@ -23,6 +23,15 @@
 namespace OHOS {
 namespace UDMF {
 using namespace OHOS::AppExecFwk;
+namespace {
+struct InsertContext : public ContextBase {
+    std::string key;
+    Intention intention;
+    std::shared_ptr<UnifiedData> unifiedData;
+    Visibility visibility;
+};
+} // namespace
+
 napi_value UnifiedDataChannelNapi::UnifiedDataChannelInit(napi_env env, napi_value exports)
 {
     LOG_DEBUG(UDMF_KITS_NAPI, "UnifiedDataChannelNapi");
@@ -99,12 +108,6 @@ napi_value UnifiedDataChannelNapi::InsertData(napi_env env, napi_callback_info i
 {
     HISTOGRAM_BOOLEAN("Udmf.APICall.insertData", true);
     LOG_DEBUG(UDMF_KITS_NAPI, "InsertData is called!");
-    struct InsertContext : public ContextBase {
-        std::string key;
-        Intention intention;
-        std::shared_ptr<UnifiedData> unifiedData;
-        Visibility visibility;
-    };
     std::string intention;
     UnifiedDataNapi *unifiedDataNapi = nullptr;
     int32_t visibility = static_cast<int32_t>(Visibility::VISIBILITY_ALL);

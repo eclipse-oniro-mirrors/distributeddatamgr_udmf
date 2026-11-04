@@ -21,6 +21,40 @@
 static { loadLibraryWithPermissionCheck("udmf_taihe_native.z", "@ohos.data.uniformDataStruct") }
 """)
 
+@!sts_inject("""
+export interface VirtualBaseItem {
+  name: string;
+  readonly type: 'file' | 'dir';
+  modifyTime: long;
+}
+
+export interface VirtualFileItem extends VirtualBaseItem {
+  id: string;
+  readonly type: 'file';
+  size: long;
+}
+
+export interface VirtualDirItem extends VirtualBaseItem {
+  readonly type: 'dir';
+  subItems?: Array<VirtualItemType>;
+}
+
+export type VirtualItemType = VirtualFileItem | VirtualDirItem;
+
+export type VirtualFileOnStat = (id: string) => Promise<VirtualFileItem>;
+
+export type VirtualFileOnRead = (id: string, offset: long, length: int) => Promise<Uint8Array>;
+
+export type VirtualFileOnCancel = (idList: Array<string>) => Promise<void>;
+
+export interface VirtualFileInfo {
+  itemInfo: VirtualItemType;
+  onStat?: VirtualFileOnStat;
+  onRead: VirtualFileOnRead;
+  onCancel?: VirtualFileOnCancel;
+}
+""")
+
 union DetailsValue {
   intType: i32;
   longType: i64;
@@ -83,6 +117,7 @@ struct Form {
 }
 
 struct FileUri {
+  @optional virtualEntry: Optional<@sts_type("VirtualFileInfo") Opaque>;
   @readonly uniformDataType: String;
   oriUri: String;
   fileType: String;
@@ -95,3 +130,39 @@ struct PixelMap {
   details: Optional<@record Map<String, DetailsValue>>;
   pixelMap: @sts_type("image.PixelMap") Opaque;
 }
+
+@!sts_inject("""
+async function virtualFileOnStatAsync(
+    handler: VirtualFileOnStat, id: string): Promise<VirtualFileItem> {
+  return handler(id);
+}
+
+function virtualFileOnStatFunc(handler: VirtualFileOnStat, id: string): VirtualFileItem {
+  return waitForCompletion(async () => {
+    return await virtualFileOnStatAsync(handler, id);
+  });
+}
+
+async function virtualFileOnReadAsync(
+    handler: VirtualFileOnRead, id: string, offset: long, length: int): Promise<Uint8Array> {
+  return handler(id, offset, length);
+}
+
+function virtualFileOnReadFunc(
+    handler: VirtualFileOnRead, id: string, offset: long, length: int): Uint8Array {
+  return waitForCompletion(async () => {
+    return await virtualFileOnReadAsync(handler, id, offset, length);
+  });
+}
+
+async function virtualFileOnCancelAsync(
+    handler: VirtualFileOnCancel, idList: Array<string>): Promise<void> {
+  return handler(idList);
+}
+
+function virtualFileOnCancelFunc(handler: VirtualFileOnCancel, idList: Array<string>): void {
+  waitForCompletion(async () => {
+    await virtualFileOnCancelAsync(handler, idList);
+  });
+}
+""")

@@ -17,6 +17,8 @@
 namespace OHOS::UDMF {
 using namespace std;
 
+UdmfServiceClient::UdmfServiceClient(const sptr<IUdmfService> &proxy) : udmfProxy_(proxy) {}
+
 std::shared_ptr<UdmfServiceClient> UdmfServiceClient::GetInstance()
 {
     if (MUdmfServiceClient::udmfServiceClient == nullptr) {
@@ -180,5 +182,15 @@ int32_t UdmfServiceClient::GetDataIfAvailable(const std::string &key, const Data
     } else {
         return MUdmfServiceClient::udmfServiceClient->GetDataIfAvailable(key, dataLoadInfo, iUdmfNotifier, unifiedData);
     }
+}
+
+int32_t UdmfServiceClient::RegisterVirtualEntry(const std::string &key, uint32_t recordIndex,
+    const VirtualEntry &entry,
+    sptr<IRemoteObject> provider)
+{
+    if (MUdmfServiceClient::udmfServiceClient == nullptr) {
+        return -1;
+    }
+    return MUdmfServiceClient::udmfServiceClient->RegisterVirtualEntry(key, recordIndex, entry, provider);
 }
 } // namespace OHOS::UDMF

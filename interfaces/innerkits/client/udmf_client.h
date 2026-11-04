@@ -61,6 +61,8 @@ private:
     UdmfClient(const UdmfClient &obj) = delete;
     UdmfClient &operator=(const UdmfClient &obj) = delete;
     void ProcessDragIfInApp(UnifiedData &unifiedData, std::string &intentionDrag, std::string &key);
+    Status ProcessDragData(const CustomOption &option, UnifiedData &unifiedData, std::string &key,
+        bool hasVirtualEntry, bool &isFinished);
     bool CheckFileUtdType(const Summary &summary, const std::vector<std::string> &allowTypes);
 
     ConcurrentMap<std::string, UnifiedData> dataCache_ {};
