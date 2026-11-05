@@ -245,7 +245,6 @@ ohos_unittest("CopyFileTest") {
     "${udmf_framework_path}/common/udmf_executor.cpp",
     "${udmf_framework_path}/common/udmf_utils.cpp",
     "${udmf_framework_path}/common/test/unittest/mock/file_copy_manager_mock.cpp",
-    "${udmf_framework_path}/innerkitsimpl/client/audit_helper.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/udmf_async_client.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/udmf_client.cpp",
     "${udmf_framework_path}/innerkitsimpl/common/progress_queue.cpp",
