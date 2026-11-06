@@ -72,7 +72,11 @@ bool ParseVirtualFile(napi_env env, napi_value value, VirtualEntry &item)
         item.id.size() > MAX_VIRTUAL_ENTRY_ID_BYTES) {
         return false;
     }
+#ifndef CROSS_PLATFORM
     return GetNamedProperty(env, value, "size", property) && ParseVirtualFileSize(env, property, item.size);
+#else
+    return false;
+#endif
 }
 
 bool ParseVirtualDirectory(
@@ -168,9 +172,13 @@ bool FileNapi::AttachVirtualEntry(napi_env env, napi_value fileUri, const std::s
     if (NapiDataUtils::IsUndefinedOrNull(env, provider)) {
         return true;
     }
+#ifndef CROSS_PLATFORM
     return IsVirtualEntryProvider(env, provider, hasOnStat) && GetNamedProperty(env, provider, "itemInfo", root) &&
            ParseVirtualItem(env, root, itemInfo, 0, itemCount) &&
            VirtualEntryNapiRegistry::GetInstance().Put(file, env, provider, std::move(itemInfo));
+#else
+    return false;
+#endif
 }
 
 napi_value FileNapi::Constructor(napi_env env)
