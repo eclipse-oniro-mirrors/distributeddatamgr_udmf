@@ -72,6 +72,7 @@ common_external_deps = [
 
 udmf_test_impl_sources = [
   "${udmf_framework_path}/common/endian_converter.cpp",
+  "${udmf_framework_path}/common/temp_udata_loader.cpp",
   "${udmf_framework_path}/common/graph.cpp",
   "${udmf_framework_path}/common/tlv_object.cpp",
   "${udmf_framework_path}/common/tlv_util.cpp",
@@ -845,6 +846,20 @@ ohos_unittest("UnifiedDataHelperTest") {
   cflags = [ "-Werror=vla" ]
 }
 
+ohos_unittest("TempUDataLoaderTest") {
+  module_out_path = module_output_path
+
+  sources = [ "temp_udata_loader_test.cpp" ]
+
+  configs = [ ":module_private_config" ]
+
+  deps = common_deps
+
+  external_deps = common_external_deps
+
+  cflags = [ "-Werror=vla" ]
+}
+
 ohos_unittest("UnifiedDataExtensionTest") {
   module_out_path = module_output_path
 
@@ -972,6 +987,7 @@ ohos_unittest("UdmfClientAbnormalTest") {
 
   sources = [
     "${udmf_framework_path}/common/endian_converter.cpp",
+    "${udmf_framework_path}/common/temp_udata_loader.cpp",
     "${udmf_framework_path}/common/tlv_util.cpp",
     "${udmf_framework_path}/common/udmf_copy_file.cpp",
     "${udmf_framework_path}/common/udmf_executor.cpp",
@@ -1170,6 +1186,7 @@ group("unittest") {
     ":SystemDefinedFormTest",
     ":SystemDefinedPixelMapTest",
     ":SystemDefinedRecordTest",
+    ":TempUDataLoaderTest",
     ":TextTest",
     ":UnifiedHtmlRecordProcessTest",
     ":UnifiedKeyTest",

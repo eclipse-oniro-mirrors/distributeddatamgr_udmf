@@ -20,6 +20,7 @@
 #include <string>
 
 #include "logger.h"
+#include "temp_udata_loader.h"
 #include "udmf_capi_common.h"
 #include "unified_data_helper.h"
 #include "file_uri.h"
@@ -156,38 +157,6 @@ HWTEST_F(UnifiedDataHelperTest, SaveUDataToFile002, TestSize.Level1)
 }
 
 /**
-* @tc.name: LoadUDataFromFile001
-* @tc.desc: Abnormal testcase of LoadUDataFromFile, the data is nullptr
-* @tc.type: FUNC
-*/
-HWTEST_F(UnifiedDataHelperTest, LoadUDataFromFile001, TestSize.Level1)
-{
-    LOG_INFO(UDMF_TEST, "LoadUDataFromFile001 begin.");
-    const std::string dataFile = "data/storage/el2/base/temp/udata";
-    UnifiedData data;
-    UnifiedDataHelper unifiedDataHelper;
-    bool ret = unifiedDataHelper.LoadUDataFromFile(dataFile, data);
-    EXPECT_FALSE(ret);
-    LOG_INFO(UDMF_TEST, "LoadUDataFromFile001 end.");
-}
-
-/**
-* @tc.name: LoadUDataFromFile002
-* @tc.desc: Abnormal testcase of LoadUDataFromFile, the data is nullptr
-* @tc.type: FUNC
-*/
-HWTEST_F(UnifiedDataHelperTest, LoadUDataFromFile002, TestSize.Level1)
-{
-    LOG_INFO(UDMF_TEST, "LoadUDataFromFile002 begin.");
-    const std::string dataFile = "data/test";
-    UnifiedData data;
-    UnifiedDataHelper unifiedDataHelper;
-    bool ret = unifiedDataHelper.LoadUDataFromFile(dataFile, data);
-    EXPECT_FALSE(ret);
-    LOG_INFO(UDMF_TEST, "LoadUDataFromFile002 end.");
-}
-
-/**
 * @tc.name: GetRootPath001
 * @tc.desc: Abnormal testcase of GetRootPath, the rootPath_ is nullptr
 * @tc.type: FUNC
@@ -210,12 +179,11 @@ HWTEST_F(UnifiedDataHelperTest, GetRootPath001, TestSize.Level1)
 HWTEST_F(UnifiedDataHelperTest, FileClose001, TestSize.Level1)
 {
     LOG_INFO(UDMF_TEST, "FileClose001 begin.");
-    UnifiedDataHelper unifiedDataHelper;
     const std::string dataFile = "data/test";
     AppFileService::ModuleFileUri::FileUri fileUri(dataFile);
     std::string path = fileUri.GetRealPath();
     std::FILE *file = fopen(path.c_str(), "r");
-    bool status = unifiedDataHelper.FileClose(file, true);
+    bool status = TempUDataLoader::FileClose(file, true);
     EXPECT_TRUE(status);
     LOG_INFO(UDMF_TEST, "FileClose001 end.");
 }
@@ -228,9 +196,8 @@ HWTEST_F(UnifiedDataHelperTest, FileClose001, TestSize.Level1)
 HWTEST_F(UnifiedDataHelperTest, FileClose002, TestSize.Level1)
 {
     LOG_INFO(UDMF_TEST, "FileClose002 begin.");
-    UnifiedDataHelper unifiedDataHelper;
     std::FILE *file = nullptr;
-    bool status = unifiedDataHelper.FileClose(file, true);
+    bool status = TempUDataLoader::FileClose(file, true);
     EXPECT_FALSE(status);
     LOG_INFO(UDMF_TEST, "FileClose002 end.");
 }

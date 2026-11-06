@@ -16,6 +16,8 @@
 #ifndef UDMF_TEMP_UDATA_LOADER_H
 #define UDMF_TEMP_UDATA_LOADER_H
 
+#include <cstdio>
+
 #include "unified_data.h"
 
 namespace OHOS {

@@ -28,7 +28,7 @@
 
 namespace OHOS {
 namespace UDMF {
-constexpr int64_t FILE_SIZE_OVERHEAD = 10 * 1024 * 1024;
+static constexpr int64_t FILE_SIZE_OVERHEAD = 10 * 1024 * 1024;
 
 bool TempUDataLoader::FileClose(std::FILE *file, bool status)
 {
@@ -51,7 +51,11 @@ bool TempUDataLoader::IsTempUData(const UnifiedData &data)
     if (records[0] == nullptr || records[0]->GetType() != UDType::FILE) {
         return false;
     }
-    return HasTempUnifiedDataFlag(records[0]);
+    if (!HasTempUnifiedDataFlag(records[0])) {
+        return false;
+    }
+    LOG_DEBUG(UDMF_FRAMEWORK, "exist temp unified data flag!");
+    return true;
 }
 
 bool TempUDataLoader::Decode(const UnifiedData &packed, UnifiedData &decoded)
