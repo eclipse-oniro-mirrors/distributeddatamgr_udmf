@@ -59,6 +59,7 @@ config("virtual_entry_provider_proxy_config") {
 
 udmf_core_sources = [
   "${udmf_framework_path}/common/endian_converter.cpp",
+  "${udmf_framework_path}/common/temp_udata_loader.cpp",
   "${udmf_framework_path}/common/tlv_object.cpp",
   "${udmf_framework_path}/common/tlv_util.cpp",
   "${udmf_framework_path}/common/udmf_radar_reporter.cpp",
@@ -202,7 +203,6 @@ ohos_shared_library("udmf_client") {
     "hisysevent:libhisysevent",
     "hitrace:hitrace_meter",
     "hitrace:libhitracechain",
-    "init:libbegetutil",
     "image_framework:image",
     "ipc:ipc_core",
     "kv_store:distributeddata_inner",

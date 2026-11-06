@@ -37,7 +37,6 @@
         "hisysevent",
         "hitrace",
         "image_framework",
-        "init",
         "ipc",
         "json",
         "kv_store",
