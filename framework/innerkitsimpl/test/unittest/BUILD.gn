@@ -61,7 +61,6 @@ common_external_deps = [
   "image_framework:image",
   "image_framework:image_native",
   "image_framework:pixelmap",
-  "init:libbegetutil",
   "ipc:ipc_core",
   "kv_store:distributeddata_inner",
   "kv_store:distributeddata_mgr",
@@ -73,6 +72,7 @@ common_external_deps = [
 
 udmf_test_impl_sources = [
   "${udmf_framework_path}/common/endian_converter.cpp",
+  "${udmf_framework_path}/common/temp_udata_loader.cpp",
   "${udmf_framework_path}/common/graph.cpp",
   "${udmf_framework_path}/common/tlv_object.cpp",
   "${udmf_framework_path}/common/tlv_util.cpp",
@@ -81,7 +81,6 @@ udmf_test_impl_sources = [
   "${udmf_framework_path}/common/udmf_radar_reporter.cpp",
   "${udmf_framework_path}/common/udmf_types_util.cpp",
   "${udmf_framework_path}/common/udmf_utils.cpp",
-  "${udmf_framework_path}/innerkitsimpl/client/audit_helper.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/getter_system.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/udmf_async_client.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/udmf_client.cpp",
@@ -847,6 +846,20 @@ ohos_unittest("UnifiedDataHelperTest") {
   cflags = [ "-Werror=vla" ]
 }
 
+ohos_unittest("TempUDataLoaderTest") {
+  module_out_path = module_output_path
+
+  sources = [ "temp_udata_loader_test.cpp" ]
+
+  configs = [ ":module_private_config" ]
+
+  deps = common_deps
+
+  external_deps = common_external_deps
+
+  cflags = [ "-Werror=vla" ]
+}
+
 ohos_unittest("UnifiedDataExtensionTest") {
   module_out_path = module_output_path
 
@@ -974,13 +987,13 @@ ohos_unittest("UdmfClientAbnormalTest") {
 
   sources = [
     "${udmf_framework_path}/common/endian_converter.cpp",
+    "${udmf_framework_path}/common/temp_udata_loader.cpp",
     "${udmf_framework_path}/common/tlv_util.cpp",
     "${udmf_framework_path}/common/udmf_copy_file.cpp",
     "${udmf_framework_path}/common/udmf_executor.cpp",
     "${udmf_framework_path}/common/udmf_radar_reporter.cpp",
     "${udmf_framework_path}/common/udmf_types_util.cpp",
     "${udmf_framework_path}/common/udmf_utils.cpp",
-    "${udmf_framework_path}/innerkitsimpl/client/audit_helper.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/getter_system.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/udmf_async_client.cpp",
     "${udmf_framework_path}/innerkitsimpl/client/udmf_client.cpp",
@@ -1084,46 +1097,6 @@ ohos_unittest("UdmfConversionTest") {
   cflags = [ "-Werror=vla" ]
 }
 
-ohos_unittest("AuditHelperTest") {
-  module_out_path = module_output_path
-
-  sources = [
-    "${udmf_framework_path}/common/udmf_utils.cpp",
-    "${udmf_framework_path}/common/udmf_executor.cpp",
-    "${udmf_framework_path}/innerkitsimpl/client/audit_helper.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/application_defined_record.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/audio.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/file.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/folder.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/html.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/image.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/link.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/plain_text.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/system_defined_appitem.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/system_defined_form.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/system_defined_pixelmap.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/system_defined_record.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/text.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/unified_data.cpp",
-    "${udmf_framework_path}/innerkitsimpl/data/unified_record.cpp",
-    "${udmf_framework_path}/innerkitsimpl/dynamic/pixelmap_loader.cpp",
-    "audit_helper_test.cpp",
-  ]
-
-  configs = [ ":module_private_config" ]
-
-  use_exceptions = true
-
-  deps = common_deps
-
-  external_deps = common_external_deps
-
-  defines = [
-    "private=public",
-    "protected=public",
-  ]
-}
-
 ohos_unittest("GetterSystemTest") {
   module_out_path = module_output_path
 
@@ -1199,7 +1172,6 @@ group("unittest") {
   deps = [
     ":ApplicationDefineRecordTest",
     ":AudioTest",
-    ":AuditHelperTest",
     ":FileDataTest",
     ":FlexibleTypeTest",
     ":FolderTest",
@@ -1214,6 +1186,7 @@ group("unittest") {
     ":SystemDefinedFormTest",
     ":SystemDefinedPixelMapTest",
     ":SystemDefinedRecordTest",
+    ":TempUDataLoaderTest",
     ":TextTest",
     ":UnifiedHtmlRecordProcessTest",
     ":UnifiedKeyTest",

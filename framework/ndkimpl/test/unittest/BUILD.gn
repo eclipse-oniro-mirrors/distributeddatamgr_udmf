@@ -61,7 +61,6 @@ common_external_deps = [
   "image_framework:image",
   "image_framework:image_native",
   "image_framework:pixelmap",
-  "init:libbegetutil",
   "ipc:ipc_single",
   "kv_store:distributeddata_inner",
   "kv_store:distributeddata_mgr",
@@ -73,6 +72,7 @@ common_external_deps = [
 
 udmf_test_impl_sources = [
   "${udmf_framework_path}/common/endian_converter.cpp",
+  "${udmf_framework_path}/common/temp_udata_loader.cpp",
   "${udmf_framework_path}/common/graph.cpp",
   "${udmf_framework_path}/common/tlv_object.cpp",
   "${udmf_framework_path}/common/tlv_util.cpp",
@@ -81,7 +81,6 @@ udmf_test_impl_sources = [
   "${udmf_framework_path}/common/udmf_radar_reporter.cpp",
   "${udmf_framework_path}/common/udmf_types_util.cpp",
   "${udmf_framework_path}/common/udmf_utils.cpp",
-  "${udmf_framework_path}/innerkitsimpl/client/audit_helper.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/getter_system.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/udmf_async_client.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/udmf_client.cpp",

@@ -19,9 +19,9 @@
 #include "common_func.h"
 #include "directory_ex.h"
 #include "file_ex.h"
-#include "file_uri.h"
 #include "error_code.h"
 #include "logger.h"
+#include "temp_udata_loader.h"
 #include "tlv_util.h"
 #include "udmf_conversion.h"
 #include "udmf_meta.h"
@@ -36,7 +36,6 @@ static constexpr int64_t MAX_IPC_RAW_DATA_SIZE = 127 * 1024 * 1024;
 static constexpr int64_t MAX_SA_DRAG_RECORD_SIZE  = 15 * 1024 * 1024 + 512 * 1024;
 constexpr const char *TEMP_UNIFIED_DATA_ROOT_PATH = "data/storage/el2/base/temp/udata";
 constexpr const char *TEMP_UNIFIED_DATA_SUFFIX = ".ud";
-static constexpr int64_t FILE_SIZE_OVERHEAD = 10 * 1024 * 1024;
 std::string UnifiedDataHelper::rootPath_ = "";
 
 namespace {
@@ -102,18 +101,7 @@ bool UnifiedDataHelper::ExceedKVSizeLimit(UnifiedData &data)
 
 bool UnifiedDataHelper::IsTempUData(UnifiedData &data)
 {
-    auto records = data.GetRecords();
-    if (records.size() != 1) {
-        return false;
-    }
-    if (records[0] == nullptr || records[0]->GetType() != UDType::FILE) {
-        return false;
-    }
-    if (!HasTempUnifiedDataFlag(records[0])) {
-        return false;
-    }
-    LOG_DEBUG(UDMF_FRAMEWORK, "exist temp unified data flag!");
-    return true;
+    return TempUDataLoader::IsTempUData(data);
 }
 
 void UnifiedDataHelper::CreateDirIfNotExist(const std::string& dirPath, const mode_t& mode)
@@ -174,21 +162,12 @@ bool UnifiedDataHelper::Pack(UnifiedData &data)
 
 bool UnifiedDataHelper::Unpack(UnifiedData &data)
 {
-    auto records = data.GetRecords();
-    if (records.size() != 1) {
-        return false;
-    }
-
-    auto uri = GetFileUriFromRecord(records[0]);
-    if (uri.empty()) {
-        LOG_ERROR(UDMF_FRAMEWORK, "Invalid file record!");
-        return false;
-    }
     UnifiedData tempData;
-    if (!LoadUDataFromFile(uri, tempData)) {
+    if (!TempUDataLoader::Decode(data, tempData)) {
         LOG_ERROR(UDMF_FRAMEWORK, "Fail to load udata from file!");
         return false;
     }
+    UdmfConversion::ConvertRecordToSubclass(tempData);
     data.SetRecords(tempData.GetRecords());
     return true;
 }
@@ -207,47 +186,9 @@ bool UnifiedDataHelper::SaveUDataToFile(const std::string &dataFile, UnifiedData
     UdmfConversion::InitValueObject(data);
     if (!TLVUtil::Writing(data, recordTlv, TAG::TAG_UNIFIED_DATA)) {
         LOG_ERROR(UDMF_FRAMEWORK, "TLV Writing failed!");
-        return FileClose(file, false);
+        return TempUDataLoader::FileClose(file, false);
     }
-    return FileClose(file, true);
-}
-
-bool UnifiedDataHelper::LoadUDataFromFile(const std::string &dataFile, UnifiedData &data)
-{
-    std::vector<uint8_t> dataBytes;
-    auto recordTlv = TLVObject(dataBytes);
-    AppFileService::ModuleFileUri::FileUri fileUri(dataFile);
-    std::string path = fileUri.GetRealPath();
-    std::FILE *file = fopen(path.c_str(), "r");
-    if (file == nullptr) {
-        LOG_ERROR(UDMF_FRAMEWORK, "failed to open file, error:%{public}s", std::strerror(errno));
-        return false;
-    }
-    struct stat fileInfo;
-    if (fstat(fileno(file), &fileInfo) != 0 ||
-        fileInfo.st_size > UnifiedData::MAX_DATA_SIZE + FILE_SIZE_OVERHEAD) {
-        LOG_ERROR(UDMF_FRAMEWORK, "failed to get file size or file size exceeds limit");
-        return FileClose(file, false);
-    }
-    recordTlv.SetFile(file);
-    if (!TLVUtil::ReadTlv(data, recordTlv, TAG::TAG_UNIFIED_DATA)) {
-        LOG_ERROR(UDMF_FRAMEWORK, "TLV Reading failed!");
-        return FileClose(file, false);
-    }
-    UdmfConversion::ConvertRecordToSubclass(data);
-    return FileClose(file, true);
-}
-
-bool UnifiedDataHelper::FileClose(std::FILE *file, bool status)
-{
-    if (file == nullptr) {
-        return false;
-    }
-    if ((fclose(file) == EOF)) {
-        LOG_ERROR(UDMF_FRAMEWORK, "fclose is failed");
-        return false;
-    }
-    return status;
+    return TempUDataLoader::FileClose(file, true);
 }
 
 std::string UnifiedDataHelper::GetRootPath()
