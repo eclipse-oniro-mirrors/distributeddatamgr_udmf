@@ -50,11 +50,13 @@ public:
     using DataCallback = std::function<void(const std::string &udKey, const UnifiedData &unifiedData)>;
 
     explicit DelayDataCallbackClient(DataCallback dataCallback);
+    DelayDataCallbackClient(DataCallback dataCallback, std::function<void(int32_t)> errorCallback);
     virtual ~DelayDataCallbackClient() = default;
     void DelayDataCallback(const std::string &key, const UnifiedData &data) override;
 
 private:
     DataCallback dataCallback_;
+    std::function<void(int32_t)> errorCallback_;
 };
 
 
