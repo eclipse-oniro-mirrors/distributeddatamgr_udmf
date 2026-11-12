@@ -17,7 +17,9 @@
 namespace OHOS::UDMF {
 using namespace std;
 
-UdmfServiceClient::UdmfServiceClient(const sptr<IUdmfService> &proxy) : udmfProxy_(proxy) {}
+UdmfServiceClient::UdmfServiceClient(const sptr<IUdmfService> &proxy) : udmfProxy_(proxy)
+{
+}
 
 std::shared_ptr<UdmfServiceClient> UdmfServiceClient::GetInstance()
 {

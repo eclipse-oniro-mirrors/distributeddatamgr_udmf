@@ -15,13 +15,17 @@
 
 #define LOG_TAG "UdmfNotifierStubTest"
 #include "udmf_notifier_stub.h"
-#include "gtest/gtest.h"
-#include "unified_data_helper.h"
-#include "file.h"
-#include "udmf_types_util.h"
+
+#include <atomic>
+#include <future>
+
 #include "accesstoken_kit.h"
+#include "file.h"
+#include "gtest/gtest.h"
 #include "nativetoken_kit.h"
 #include "token_setproc.h"
+#include "udmf_types_util.h"
+#include "unified_data_helper.h"
 
 namespace OHOS::UDMF {
 using namespace testing::ext;
@@ -230,5 +234,107 @@ HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_OnRemoteRequest_ValidProcess_00
 
     int ret = client.OnRemoteRequest(code, data, reply, option);
     EXPECT_EQ(ret, 0);
+}
+} // namespace OHOS::UDMF
+namespace OHOS::UDMF {
+/**
+ * @tc.name: DelayDataCallback_EmptyResult_ReportsExistingNotFoundError
+ * @tc.desc: Verify the receiver-side event contract through public interfaces.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_EmptyResult_ReportsExistingNotFoundError, TestSize.Level1)
+{
+    std::atomic<int> deliveries{ 0 };
+    std::promise<int32_t> error;
+    auto result = error.get_future();
+    DelayDataCallbackClient callback([&deliveries](const std::string &, const UnifiedData &) { deliveries++; },
+        [&error](int32_t status) { error.set_value(status); });
+    callback.DelayDataCallback("denied", UnifiedData());
+    ASSERT_EQ(result.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    EXPECT_EQ(result.get(), E_NOT_FOUND);
+    EXPECT_EQ(deliveries.load(), 0);
+}
+/**
+ * @tc.name: DelayDataCallback_NonemptyResult_PreservesDataCompletion
+ * @tc.desc: Verify the receiver-side event contract through public interfaces.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_NonemptyResult_PreservesDataCompletion, TestSize.Level1)
+{
+    std::atomic<int> errors{ 0 };
+    std::promise<size_t> delivered;
+    auto result = delivered.get_future();
+    DelayDataCallbackClient callback(
+        [&delivered](const std::string &, const UnifiedData &data) { delivered.set_value(data.GetRecords().size()); },
+        [&errors](int32_t) { errors++; });
+    UnifiedData data;
+    data.AddRecord(std::make_shared<UnifiedRecord>());
+    callback.DelayDataCallback("allowed", data);
+    ASSERT_EQ(result.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    EXPECT_EQ(result.get(), 1u);
+    EXPECT_EQ(errors.load(), 0);
+}
+
+/**
+ * @tc.name: DelayDataCallback_LegacyEmptyResult_StillInvokesDataHandler
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_LegacyEmptyResult_StillInvokesDataHandler, TestSize.Level1)
+{
+    auto delivered = std::make_shared<std::promise<std::pair<std::string, bool>>>();
+    auto ready = delivered->get_future();
+    DelayDataCallbackClient callback([delivered](const std::string &key, const UnifiedData &data) {
+        delivered->set_value({ key, data.IsEmpty() });
+    });
+    callback.DelayDataCallback("legacy-empty", UnifiedData());
+    ASSERT_EQ(ready.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    auto actual = ready.get();
+    EXPECT_EQ(actual.first, "legacy-empty");
+    EXPECT_TRUE(actual.second);
+}
+/**
+ * @tc.name: DelayDataCallback_EmptyOptionalErrorHandler_PreservesLegacyDelivery
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_EmptyOptionalErrorHandler_PreservesLegacyDelivery, TestSize.Level1)
+{
+    auto delivered = std::make_shared<std::promise<bool>>();
+    auto ready = delivered->get_future();
+    DelayDataCallbackClient callback(
+        [delivered](const std::string &, const UnifiedData &data) { delivered->set_value(data.IsEmpty()); }, {});
+    callback.DelayDataCallback("empty-error-handler", UnifiedData());
+    ASSERT_EQ(ready.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    EXPECT_TRUE(ready.get());
+}
+/**
+ * @tc.name: DelayDataCallback_NonemptyResult_PreservesKeyAndContent
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfNotifierStubTest, DelayDataCallback_NonemptyResult_PreservesKeyAndContent, TestSize.Level1)
+{
+    auto delivered = std::make_shared<std::promise<std::pair<std::string, std::string>>>();
+    auto ready = delivered->get_future();
+    auto errors = std::make_shared<std::atomic<int>>(0);
+    DelayDataCallbackClient callback(
+        [delivered](const std::string &key, const UnifiedData &data) {
+            delivered->set_value({ key, std::get<std::string>(data.GetRecords().at(0)->GetOriginValue()) });
+        },
+        [errors](int32_t) { ++(*errors); });
+    UnifiedData data;
+    data.AddRecord(std::make_shared<UnifiedRecord>(PLAIN_TEXT, std::string("accepted")));
+    callback.DelayDataCallback("accepted-key", data);
+    ASSERT_EQ(ready.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    auto actual = ready.get();
+    EXPECT_EQ(actual.first, "accepted-key");
+    EXPECT_EQ(actual.second, "accepted");
+    EXPECT_EQ(errors->load(), 0);
 }
 } // namespace OHOS::UDMF

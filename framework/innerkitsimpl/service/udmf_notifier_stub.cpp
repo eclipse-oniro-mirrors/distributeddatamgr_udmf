@@ -19,10 +19,10 @@
 #include "ipc_skeleton.h"
 #include "logger.h"
 #include "udmf_async_client.h"
-#include "unified_data_helper.h"
 #include "udmf_conversion.h"
 #include "udmf_types_util.h"
 #include "udmf_utils.h"
+#include "unified_data_helper.h"
 #include "unified_html_record_process.h"
 
 namespace OHOS {
@@ -95,8 +95,18 @@ int32_t DelayDataCallbackStub::OnRemoteRequest(uint32_t code, MessageParcel &dat
 
 DelayDataCallbackClient::DelayDataCallbackClient(DataCallback dataCallback):dataCallback_(dataCallback) {}
 
+DelayDataCallbackClient::DelayDataCallbackClient(DataCallback dataCallback, std::function<void(int32_t)> errorCallback)
+    : dataCallback_(std::move(dataCallback)), errorCallback_(std::move(errorCallback))
+{
+}
+
 void DelayDataCallbackClient::DelayDataCallback(const std::string &key, const UnifiedData &unifiedData)
 {
+    auto errorCallback = errorCallback_;
+    if (unifiedData.IsEmpty() && errorCallback) {
+        UdmfAsyncClient::GetInstance().PushTaskToExecutor([errorCallback] { errorCallback(E_NOT_FOUND); });
+        return;
+    }
     auto dataCallback = dataCallback_;
     UdmfAsyncClient::GetInstance().PushTaskToExecutor(
         [dataCallback, key, unifiedData] { dataCallback(key, unifiedData); });

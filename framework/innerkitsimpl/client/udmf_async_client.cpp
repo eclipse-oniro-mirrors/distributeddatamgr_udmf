@@ -317,6 +317,25 @@ Status UdmfAsyncClient::CheckSync(std::shared_ptr<AsyncHelper> asyncHelper, cons
     return E_OK;
 }
 
+void UdmfAsyncClient::HandleDelayDataError(
+    const std::string &key, const std::weak_ptr<AsyncHelper> &expected, int32_t status)
+{
+    auto pending = expected.lock();
+    if (pending == nullptr) {
+        return;
+    }
+    auto &client = UdmfAsyncClient::GetInstance();
+    {
+        std::lock_guard<std::mutex> lock(client.mutex_);
+        auto it = client.asyncHelperMap_.find(key);
+        if (it == client.asyncHelperMap_.end() || it->second != pending) {
+            return;
+        }
+    }
+    ProgressInfo progressInfo = { .progress = PROGRESS_ERROR, .errorCode = static_cast<Status>(status) };
+    client.CallProgress(pending, progressInfo, nullptr);
+}
+
 Status UdmfAsyncClient::GetDataFromDB(std::shared_ptr<AsyncHelper> asyncHelper, const QueryOption &query)
 {
     auto &data = *(asyncHelper->data);
@@ -338,7 +357,10 @@ Status UdmfAsyncClient::GetDataFromDB(std::shared_ptr<AsyncHelper> asyncHelper, 
         *(asyncHelperPtr->data) = unifiedData;
         UdmfAsyncClient::GetInstance().ProcessUnifiedData(asyncHelperPtr);
     };
-    sptr<IRemoteObject> iUdmfNotifier = new (std::nothrow) DelayDataCallbackClient(delayDataCallback);
+    auto delayDataError = [key = query.key, expected = std::weak_ptr<AsyncHelper>(asyncHelper)](
+                              int32_t status) { HandleDelayDataError(key, expected, status); };
+    sptr<IRemoteObject> iUdmfNotifier = new (std::nothrow)
+        DelayDataCallbackClient(delayDataCallback, std::move(delayDataError));
     if (iUdmfNotifier == nullptr) {
         LOG_ERROR(UDMF_CLIENT, "IUdmfNotifier unavailable");
         return E_ERROR;

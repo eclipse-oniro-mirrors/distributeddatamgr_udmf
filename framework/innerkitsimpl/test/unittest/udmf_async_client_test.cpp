@@ -33,6 +33,8 @@ using namespace testing::ext;
 using namespace OHOS::Security::AccessToken;
 using namespace OHOS::UDMF;
 using namespace OHOS;
+
+#ifndef UDMF_AUTH_BOUNDARY_TEST
 namespace OHOS::Test {
 static constexpr int USER_ID = 100;
 static constexpr int END_INTERVAL = 2;
@@ -1007,4 +1009,275 @@ HWTEST_F(UdmfAsyncClientTest, GetInnerDataParams003, TestSize.Level1)
     ASSERT_EQ(status, E_INVALID_PARAMETERS);
     LOG_INFO(UDMF_TEST, "GetInnerDataParams003 end.");
 }
-} // OHOS::Test
+} // namespace OHOS::Test
+#else
+
+#include <atomic>
+#include <condition_variable>
+#include <future>
+#include <mutex>
+
+#include "udmf_executor_mock.h"
+#include "udmf_notifier_stub.h"
+#include "udmf_service_client_mock.h"
+
+namespace OHOS::Test {
+class UdmfAsyncAuthBoundaryTest : public testing::Test {
+public:
+    void SetUp() override
+    {
+        AuthTaskScheduler::Reset();
+        service_ = std::make_shared<testing::NiceMock<UdmfServiceClientMock>>();
+        MUdmfServiceClient::udmfServiceClient = service_;
+        client_ = std::make_shared<UdmfServiceClient>(nullptr);
+        ON_CALL(*service_, GetInstance()).WillByDefault(testing::Return(client_));
+        ON_CALL(*service_, ObtainAsynProcess(testing::_)).WillByDefault([](AsyncProcessInfo &info) {
+            info.syncStatus = AsyncTaskStatus::ASYNC_SUCCESS;
+            return E_OK;
+        });
+    }
+    void TearDown() override
+    {
+        AuthTaskScheduler::Reset();
+        MUdmfServiceClient::udmfServiceClient = nullptr;
+    }
+    std::shared_ptr<testing::NiceMock<UdmfServiceClientMock>> service_;
+    std::shared_ptr<UdmfServiceClient> client_;
+};
+/**
+ * @tc.name:
+ * StartAsyncDataRetrieval_EmptyDelayedResult_ReportsNotFoundAndClearsTask
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfAsyncAuthBoundaryTest, StartAsyncDataRetrieval_EmptyDelayedResult_ReportsNotFoundAndClearsTask,
+    TestSize.Level1)
+{
+    const std::string key = "udmf://drag/com.test.auth/empty-result";
+    std::promise<sptr<IRemoteObject>> registered;
+    auto notifier = registered.get_future();
+    std::promise<void> cleared;
+    auto done = cleared.get_future();
+    EXPECT_CALL(*service_, GetDataIfAvailable(key, testing::_, testing::_, testing::_))
+        .WillOnce([&](const auto &, const auto &, auto callback, auto) {
+            registered.set_value(callback);
+            return E_OK;
+        });
+    EXPECT_CALL(*service_, ClearAsynProcessByKey(key)).WillOnce([&](const auto &) {
+        cleared.set_value();
+        return E_OK;
+    });
+    std::promise<ProgressInfo> error;
+    auto result = error.get_future();
+    std::atomic<int> payloads{ 0 };
+    GetDataParams params;
+    params.query.key = key;
+    params.query.intention = UD_INTENTION_DRAG;
+    params.progressIndicator = ProgressIndicator::NONE;
+    params.progressListener = [&](ProgressInfo progress, auto data) {
+        if (data != nullptr) {
+            ++payloads;
+        }
+        if (progress.progress < 0) {
+            error.set_value(progress);
+        }
+    };
+    ASSERT_EQ(UdmfAsyncClient::GetInstance().StartAsyncDataRetrieval(params), E_OK);
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    ASSERT_EQ(notifier.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    auto remote = notifier.get();
+    ASSERT_NE(remote, nullptr);
+    auto callback = iface_cast<IDelayDataCallback>(remote);
+    ASSERT_NE(callback, nullptr);
+    callback->DelayDataCallback(key, UnifiedData());
+    ASSERT_TRUE(AuthTaskScheduler::RunLast());
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    ASSERT_EQ(result.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    auto actual = result.get();
+    EXPECT_EQ(actual.progress, -1);
+    EXPECT_EQ(actual.errorCode, E_NOT_FOUND);
+    EXPECT_EQ(actual.progressStatus, ListenerStatus::DATA_NOT_FOUND);
+    EXPECT_EQ(payloads.load(), 0);
+    ASSERT_EQ(done.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    EXPECT_EQ(UdmfAsyncClient::GetInstance().Cancel(key), E_ERROR);
+}
+/**
+ * @tc.name:
+ * StartAsyncDataRetrieval_SynchronousReadFailures_KeepExistingErrorMapping
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfAsyncAuthBoundaryTest, StartAsyncDataRetrieval_SynchronousReadFailures_KeepExistingErrorMapping,
+    TestSize.Level1)
+{
+    const std::vector<std::pair<Status, ListenerStatus>> failures = { { E_NO_PERMISSION, ListenerStatus::INNER_ERROR },
+        { E_INVALID_PARAMETERS, ListenerStatus::INVALID_PARAMETERS },
+        { E_NOT_FOUND, ListenerStatus::DATA_NOT_FOUND } };
+    for (const auto &entry : failures) {
+        const std::string key = "udmf://drag/com.test.auth/failure-" + std::to_string(entry.first);
+        std::promise<ProgressInfo> error;
+        auto result = error.get_future();
+        std::promise<void> cleared;
+        auto done = cleared.get_future();
+        EXPECT_CALL(*service_, GetDataIfAvailable(key, testing::_, testing::_, testing::_))
+            .WillOnce(testing::Return(entry.first));
+        EXPECT_CALL(*service_, ClearAsynProcessByKey(key)).WillOnce([&](const auto &) {
+            cleared.set_value();
+            return E_OK;
+        });
+        GetDataParams params;
+        params.query.key = key;
+        params.query.intention = UD_INTENTION_DRAG;
+        params.progressIndicator = ProgressIndicator::NONE;
+        params.progressListener = [&](ProgressInfo progress, auto data) {
+            EXPECT_EQ(data, nullptr);
+            if (progress.progress < 0) {
+                error.set_value(progress);
+            }
+        };
+        ASSERT_EQ(UdmfAsyncClient::GetInstance().StartAsyncDataRetrieval(params), E_OK);
+        ASSERT_TRUE(AuthTaskScheduler::RunNext());
+        ASSERT_TRUE(AuthTaskScheduler::RunNext());
+        ASSERT_EQ(result.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+        auto actual = result.get();
+        EXPECT_EQ(actual.progress, -1);
+        EXPECT_EQ(actual.errorCode, entry.first);
+        EXPECT_EQ(actual.progressStatus, entry.second);
+        ASSERT_EQ(done.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    }
+}
+/**
+ * @tc.name:
+ * StartAsyncDataRetrieval_ImmediateAcceptedData_DeliversPayloadAndFinishes
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfAsyncAuthBoundaryTest, StartAsyncDataRetrieval_ImmediateAcceptedData_DeliversPayloadAndFinishes,
+    TestSize.Level1)
+{
+    const std::string key = "udmf://drag/com.test.auth/immediate";
+    EXPECT_CALL(*service_, GetDataIfAvailable(key, testing::_, testing::_, testing::_))
+        .WillOnce([](const auto &, const auto &, auto, auto output) {
+            output->AddRecord(std::make_shared<PlainText>("accepted", ""));
+            return E_OK;
+        });
+    std::promise<void> cleared;
+    auto done = cleared.get_future();
+    EXPECT_CALL(*service_, ClearAsynProcessByKey(key)).WillOnce([&](const auto &) {
+        cleared.set_value();
+        return E_OK;
+    });
+    std::promise<std::shared_ptr<UnifiedData>> finished;
+    auto result = finished.get_future();
+    GetDataParams params;
+    params.query.key = key;
+    params.query.intention = UD_INTENTION_DRAG;
+    params.progressIndicator = ProgressIndicator::NONE;
+    params.progressListener = [&](ProgressInfo progress, auto data) {
+        EXPECT_EQ(progress.errorCode, E_OK);
+        if (progress.progress == 100) {
+            finished.set_value(data);
+        }
+    };
+    ASSERT_EQ(UdmfAsyncClient::GetInstance().StartAsyncDataRetrieval(params), E_OK);
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    ASSERT_EQ(result.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    auto data = result.get();
+    ASSERT_NE(data, nullptr);
+    ASSERT_EQ(data->GetRecords().size(), 1u);
+    EXPECT_EQ(std::static_pointer_cast<PlainText>(data->GetRecords()[0])->GetContent(), "accepted");
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    ASSERT_EQ(done.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+}
+
+/**
+ * @tc.name:
+ * StartAsyncDataRetrieval_LateErrorAfterClearOrSameKeyRetry_CannotAffectAnotherTask
+ * @tc.desc: Verify public behavior, failure propagation and observable state.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(UdmfAsyncAuthBoundaryTest, StartAsyncDataRetrieval_LateErrorAfterClearOrSameKeyRetry_CannotAffectAnotherTask,
+    TestSize.Level1)
+{
+    const std::string key = "udmf://drag/com.test.auth/late-error";
+    sptr<IDelayDataCallback> oldCallback;
+    sptr<IDelayDataCallback> newCallback;
+    int oldErrors = 0;
+    int newErrors = 0;
+    int clears = 0;
+    GetDataParams oldParams;
+    oldParams.query.key = key;
+    oldParams.query.intention = UD_INTENTION_DRAG;
+    oldParams.progressIndicator = ProgressIndicator::NONE;
+    oldParams.progressListener = [&](ProgressInfo progress, auto data) {
+        EXPECT_EQ(data, nullptr);
+        if (progress.progress < 0) {
+            ++oldErrors;
+            EXPECT_EQ(progress.errorCode, E_NOT_FOUND);
+        }
+    };
+    GetDataParams newParams = oldParams;
+    newParams.progressListener = [&](ProgressInfo progress, auto data) {
+        EXPECT_EQ(data, nullptr);
+        if (progress.progress < 0) {
+            ++newErrors;
+            EXPECT_EQ(progress.errorCode, E_NOT_FOUND);
+        }
+    };
+    EXPECT_CALL(*service_, ClearAsynProcessByKey(key)).Times(2).WillRepeatedly([&](const auto &) {
+        ++clears;
+        return E_OK;
+    });
+    EXPECT_CALL(*service_, GetDataIfAvailable(key, testing::_, testing::_, testing::_))
+        .WillOnce([&](const auto &, const auto &, auto remote, auto) {
+            oldCallback = iface_cast<IDelayDataCallback>(remote);
+            oldCallback->DelayDataCallback(key, UnifiedData());
+            EXPECT_TRUE(AuthTaskScheduler::RunLast());
+            EXPECT_EQ(oldErrors, 1);
+            EXPECT_TRUE(AuthTaskScheduler::RunNext());
+            EXPECT_EQ(clears, 1);
+            // Old retrieval is still on the stack: its helper is alive, but no map
+            // entry exists.
+            oldCallback->DelayDataCallback(key, UnifiedData());
+            EXPECT_TRUE(AuthTaskScheduler::RunLast());
+            EXPECT_EQ(oldErrors, 1);
+            EXPECT_EQ(UdmfAsyncClient::GetInstance().StartAsyncDataRetrieval(newParams), E_OK);
+            // The new helper now owns the same key; the old callback must fail the
+            // identity check.
+            oldCallback->DelayDataCallback(key, UnifiedData());
+            EXPECT_TRUE(AuthTaskScheduler::RunLast());
+            EXPECT_EQ(oldErrors, 1);
+            EXPECT_EQ(newErrors, 0);
+            return E_OK;
+        })
+        .WillOnce([&](const auto &, const auto &, auto remote, auto) {
+            newCallback = iface_cast<IDelayDataCallback>(remote);
+            return E_OK;
+        });
+    ASSERT_EQ(UdmfAsyncClient::GetInstance().StartAsyncDataRetrieval(oldParams), E_OK);
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    ASSERT_NE(oldCallback, nullptr);
+    // The original retrieval returned: only its weak reference remains in the old
+    // callback.
+    oldCallback->DelayDataCallback(key, UnifiedData());
+    ASSERT_TRUE(AuthTaskScheduler::RunLast());
+    EXPECT_EQ(oldErrors, 1);
+    EXPECT_EQ(newErrors, 0);
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    ASSERT_NE(newCallback, nullptr);
+    newCallback->DelayDataCallback(key, UnifiedData());
+    ASSERT_TRUE(AuthTaskScheduler::RunLast());
+    EXPECT_EQ(oldErrors, 1);
+    EXPECT_EQ(newErrors, 1);
+    ASSERT_TRUE(AuthTaskScheduler::RunNext());
+    EXPECT_EQ(clears, 2);
+    EXPECT_EQ(UdmfAsyncClient::GetInstance().Cancel(key), E_ERROR);
+    EXPECT_FALSE(AuthTaskScheduler::RunNext());
+}
+} // namespace OHOS::Test
+
+#endif

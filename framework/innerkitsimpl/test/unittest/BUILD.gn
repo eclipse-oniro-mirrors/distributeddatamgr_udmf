@@ -245,6 +245,37 @@ ohos_unittest("UdmfAsyncClientTest") {
   cflags = [ "-Werror=vla" ]
 }
 
+ohos_unittest("UdmfAsyncAuthBoundaryTest") {
+  testonly = true
+  module_out_path = module_output_path
+  configs = [ ":module_private_config" ]
+  sources =
+      udmf_test_impl_sources - [
+        "${udmf_framework_path}/common/udmf_executor.cpp",
+        "${udmf_framework_path}/innerkitsimpl/service/udmf_service_client.cpp",
+      ] +
+      [
+        "mock/udmf_executor_mock.cpp",
+        "mock/udmf_service_client_mock.cpp",
+        "udmf_async_client_test.cpp",
+      ]
+  deps = udmf_test_impl_deps
+
+  external_deps = common_external_deps
+
+  external_deps += [
+    "googletest:gmock_main",
+    "googletest:gtest_main",
+  ]
+
+  defines = [ "UDMF_AUTH_BOUNDARY_TEST" ]
+  use_exceptions = true
+  cflags = [
+    "-fno-access-control",
+    "-Werror=vla",
+  ]
+}
+
 ohos_unittest("UdmfDelayDataTest") {
   module_out_path = module_output_path
 
@@ -1191,6 +1222,7 @@ group("unittest") {
     ":UnifiedHtmlRecordProcessTest",
     ":UnifiedKeyTest",
     ":UdmfAsyncClientTest",
+    ":UdmfAsyncAuthBoundaryTest",
     ":UdmfClientAbnormalTest",
     ":UdmfClientFileMangerTest",
     ":UdmfClientHapPermissionTest",
