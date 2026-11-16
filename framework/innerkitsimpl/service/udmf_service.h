@@ -61,11 +61,6 @@ public:
         sptr<IRemoteObject> iUdmfNotifier, std::shared_ptr<UnifiedData> unifiedData) = 0;
     virtual int32_t RegisterVirtualEntry(const std::string &key, uint32_t recordIndex, const VirtualEntry &entry,
         sptr<IRemoteObject> provider) = 0;
-    virtual int32_t RollbackVirtualEntry(const std::string &key)
-    {
-        (void)key;
-        return E_ERROR;
-    }
 };
 } // namespace UDMF
 } // namespace OHOS

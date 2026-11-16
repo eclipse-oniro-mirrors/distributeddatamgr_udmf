@@ -340,14 +340,6 @@ int32_t UdmfServiceClient::GetDataIfAvailable(const std::string &key, const Data
     return udmfProxy_->GetDataIfAvailable(key, dataLoadInfo, iUdmfNotifier, unifiedData);
 }
 
-int32_t UdmfServiceClient::RollbackVirtualEntry(const std::string &key)
-{
-    if (key.empty() || udmfProxy_ == nullptr) {
-        return E_INVALID_PARAMETERS;
-    }
-    return udmfProxy_->RollbackVirtualEntry(key);
-}
-
 int32_t UdmfServiceClient::RegisterVirtualEntry(const std::string &key, uint32_t recordIndex,
     const VirtualEntry &entry,
     sptr<IRemoteObject> provider)

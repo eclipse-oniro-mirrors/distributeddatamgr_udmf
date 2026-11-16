@@ -40,7 +40,6 @@ enum class UdmfServiceInterfaceCode : uint32_t {
     SET_DELAY_DATA,
     GET_DELAY_DATA,
     REGISTER_VIRTUAL_ENTRY,
-    ROLLBACK_VIRTUAL_ENTRY,
     CODE_BUTT
 };
 

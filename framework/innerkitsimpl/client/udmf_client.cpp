@@ -104,21 +104,6 @@ Status FindVirtualEntryRegistration(const UnifiedData &data, VirtualEntryRegistr
     return providerCount <= 1 ? E_OK : E_INVALID_PARAMETERS;
 }
 
-Status RegisterVirtualEntryOrRollback(const std::shared_ptr<UdmfServiceClient> &service,
-    std::string &key, const VirtualEntryRegistration &registration)
-{
-    auto status = static_cast<Status>(service->RegisterVirtualEntry(
-        key, registration.recordIndex, registration.entry, registration.provider));
-    if (status != E_OK) {
-        auto rollbackStatus = service->RollbackVirtualEntry(key);
-        if (rollbackStatus != E_OK) {
-            LOG_ERROR(UDMF_CLIENT, "Virtual entry rollback failed, status:%{public}d", rollbackStatus);
-        }
-        key.clear();
-    }
-    return status;
-}
-
 Status SetDataToService(const std::shared_ptr<UdmfServiceClient> &service, CustomOption &option,
     UnifiedData &unifiedData, std::string &key, const VirtualEntryRegistration &registration)
 {
@@ -138,7 +123,12 @@ Status SetDataToService(const std::shared_ptr<UdmfServiceClient> &service, Custo
     if (status != E_OK || !registration.found) {
         return status;
     }
-    return RegisterVirtualEntryOrRollback(service, key, registration);
+    status = static_cast<Status>(service->RegisterVirtualEntry(
+        key, registration.recordIndex, registration.entry, registration.provider));
+    if (status != E_OK) {
+        key.clear();
+    }
+    return status;
 }
 } // namespace
 

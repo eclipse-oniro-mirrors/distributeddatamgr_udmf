@@ -17,7 +17,6 @@
 
 #include "logger.h"
 #include "udmf_types_util.h"
-#include "virtual_entry_parcel.h"
 #include "udmf_conversion.h"
 #include "unified_data_helper.h"
 #include "unified_html_record_process.h"
@@ -325,19 +324,6 @@ int32_t UdmfServiceProxy::GetDataIfAvailable(const std::string &key, const DataL
     return status;
 }
 
-int32_t UdmfServiceProxy::RollbackVirtualEntry(const std::string &key)
-{
-    if (key.empty()) {
-        return E_INVALID_PARAMETERS;
-    }
-    MessageParcel reply;
-    int32_t status = IPC_SEND(UdmfServiceInterfaceCode::ROLLBACK_VIRTUAL_ENTRY, reply, key);
-    if (status != E_OK) {
-        return status;
-    }
-    return reply.ReadInt32(status) ? status : E_READ_PARCEL_ERROR;
-}
-
 int32_t UdmfServiceProxy::RegisterVirtualEntry(const std::string &key, uint32_t recordIndex,
     const VirtualEntry &entry,
     sptr<IRemoteObject> provider)
@@ -350,7 +336,7 @@ int32_t UdmfServiceProxy::RegisterVirtualEntry(const std::string &key, uint32_t 
     MessageOption option;
     if (!request.WriteInterfaceToken(GetDescriptor()) || !request.WriteString(key) ||
         !request.WriteUint32(recordIndex) ||
-        !VirtualEntryParcel::Write(request, entry) || !request.WriteRemoteObject(provider)) {
+        !ITypesUtil::Marshalling(entry, request) || !request.WriteRemoteObject(provider)) {
         return E_WRITE_PARCEL_ERROR;
     }
     if (SendRequest(UdmfServiceInterfaceCode::REGISTER_VIRTUAL_ENTRY, request, reply, option) != 0) {

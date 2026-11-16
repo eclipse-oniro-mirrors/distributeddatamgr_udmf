@@ -442,38 +442,35 @@ HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_SetDataSuccessRegister
 }
 
 /**
- * @tc.name: SetData_DragVirtualEntry_RegisterFailure_RollsBackVirtualEntry
- * @tc.desc: Verify failed registration uses the internal rollback and clears the failed key.
+ * @tc.name: SetData_DragVirtualEntry_RegisterFailure_ReturnsErrorAndClearsKey
+ * @tc.desc: Verify failed registration returns the original error and clears the failed key.
  * @tc.type: FUNC
+ * @tc.author: agent
  */
-HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_RollsBackVirtualEntry, TestSize.Level1)
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_ReturnsErrorAndClearsKey, TestSize.Level1)
 {
-    for (int32_t rollbackStatus : { E_OK, E_ERROR }) {
-        auto file = std::make_shared<File>();
-        AttachmentOwner owner;
-        sptr<DummyProvider> provider = new DummyProvider();
-        ASSERT_TRUE(VirtualEntryAttachmentRegistry::Attach(file, MakeValidEntry(), provider->AsObject(), &owner));
+    auto file = std::make_shared<File>();
+    AttachmentOwner owner;
+    sptr<DummyProvider> provider = new DummyProvider();
+    ASSERT_TRUE(VirtualEntryAttachmentRegistry::Attach(file, MakeValidEntry(), provider->AsObject(), &owner));
 
-        auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
-        EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
-        EXPECT_CALL(*mock_, GetAppShareOption(_, _))
-            .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
-        EXPECT_CALL(*mock_, SetData(_, _, _, _))
-            .WillOnce(DoAll(SetArgReferee<3>(std::string("failed-drag-key")), Return(E_OK)));
-        EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).WillOnce(Return(E_WRITE_PARCEL_ERROR));
-        EXPECT_CALL(*mock_, DeleteData(_, _)).Times(0);
-        EXPECT_CALL(*mock_, RollbackVirtualEntry(testing::Eq(std::string("failed-drag-key"))))
-            .WillOnce(Return(rollbackStatus));
+    auto serviceClient = std::make_shared<UdmfServiceClient>(nullptr);
+    EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
+    EXPECT_CALL(*mock_, GetAppShareOption(_, _))
+        .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _))
+        .WillOnce(DoAll(SetArgReferee<3>(std::string("failed-drag-key")), Return(E_OK)));
+    EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).WillOnce(Return(E_WRITE_PARCEL_ERROR));
+    EXPECT_CALL(*mock_, DeleteData(_, _)).Times(0);
 
-        UdmfClient client;
-        UnifiedData unifiedData;
-        unifiedData.AddRecord(file);
-        CustomOption option;
-        option.intention = Intention::UD_INTENTION_DRAG;
-        std::string key;
-        EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_WRITE_PARCEL_ERROR);
-        EXPECT_TRUE(key.empty());
-    }
+    UdmfClient client;
+    UnifiedData unifiedData;
+    unifiedData.AddRecord(file);
+    CustomOption option;
+    option.intention = Intention::UD_INTENTION_DRAG;
+    std::string key;
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_WRITE_PARCEL_ERROR);
+    EXPECT_TRUE(key.empty());
 }
 
 /**

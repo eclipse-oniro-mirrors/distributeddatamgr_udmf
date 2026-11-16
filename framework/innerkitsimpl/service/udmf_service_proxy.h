@@ -56,7 +56,6 @@ public:
         sptr<IRemoteObject> iUdmfNotifier, std::shared_ptr<UnifiedData> unifiedData) override;
     int32_t RegisterVirtualEntry(const std::string &key, uint32_t recordIndex, const VirtualEntry &entry,
         sptr<IRemoteObject> provider) override;
-    int32_t RollbackVirtualEntry(const std::string &key) override;
 private:
     static inline BrokerDelegator<UdmfServiceProxy> delegator_;
     int32_t SendRequest(UdmfServiceInterfaceCode code, MessageParcel &data,

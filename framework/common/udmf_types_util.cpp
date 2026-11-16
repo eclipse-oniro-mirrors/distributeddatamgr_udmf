@@ -16,7 +16,6 @@
 #include "udmf_types_util.h"
 
 #include <utility>
-#include "virtual_entry_parcel.h"
 
 #include "logger.h"
 #include "tlv_util.h"
@@ -336,48 +335,21 @@ bool Unmarshalling(DataLoadInfo &output, MessageParcel &parcel)
     }
     return true;
 }
-} // namespace ITypesUtil
-} // namespace OHOS
 
-namespace OHOS::UDMF {
-bool VirtualEntryParcel::Write(MessageParcel &parcel, const VirtualEntry &entry)
-{
-    Parcel payload;
-    uint32_t count = 0;
-    if (!payload.SetMaxCapacity(MAX_BYTES) || !WriteNode(payload, entry, count, 0)) {
-        return false;
-    }
-    return parcel.WriteUint32(VERSION) && parcel.WriteUint32(static_cast<uint32_t>(payload.GetDataSize())) &&
-        parcel.WriteRawData(reinterpret_cast<const void *>(payload.GetData()), payload.GetDataSize());
-}
+namespace {
+constexpr uint32_t VIRTUAL_ENTRY_VERSION = 1;
+// A maximum-length 4096-node tree fits within this rounded, bounded budget.
+constexpr uint32_t VIRTUAL_ENTRY_MAX_BYTES = 8 * 1024 * 1024;
+constexpr uint32_t VIRTUAL_ENTRY_MAX_COUNT = 4096;
+constexpr uint32_t VIRTUAL_ENTRY_MAX_DEPTH = 64;
+constexpr size_t VIRTUAL_ENTRY_MAX_ID_BYTES = 1024;
+constexpr size_t VIRTUAL_ENTRY_MAX_NAME_BYTES = 255;
 
-bool VirtualEntryParcel::Read(MessageParcel &parcel, VirtualEntry &entry)
+bool WriteVirtualEntryNode(Parcel &parcel, const VirtualEntry &entry, uint32_t &count, uint32_t depth)
 {
-    uint32_t version = 0;
-    uint32_t size = 0;
-    if (!parcel.ReadUint32(version) || version != VERSION || !parcel.ReadUint32(size) || size == 0 ||
-        size > MAX_BYTES) {
-        return false;
-    }
-    const void *bytes = parcel.ReadRawData(size);
-    Parcel payload;
-    // Decode an owned snapshot rather than a mapping writable by the remote process.
-    if (bytes == nullptr || !payload.SetMaxCapacity(MAX_BYTES) || !payload.WriteBuffer(bytes, size)) {
-        return false;
-    }
-    uint32_t count = 0;
-    VirtualEntry decoded;
-    if (!ReadNode(payload, decoded, count, 0) || payload.GetReadableBytes() != 0) {
-        return false;
-    }
-    entry = std::move(decoded);
-    return true;
-}
-
-bool VirtualEntryParcel::WriteNode(Parcel &parcel, const VirtualEntry &entry, uint32_t &count, uint32_t depth)
-{
-    if (depth > MAX_DEPTH || count >= MAX_COUNT || entry.id.size() > MAX_ID_BYTES || entry.name.size() > MAX_NAME_BYTES ||
-        entry.subItems.size() > MAX_COUNT - count - 1 ||
+    if (depth > VIRTUAL_ENTRY_MAX_DEPTH || count >= VIRTUAL_ENTRY_MAX_COUNT ||
+        entry.id.size() > VIRTUAL_ENTRY_MAX_ID_BYTES || entry.name.size() > VIRTUAL_ENTRY_MAX_NAME_BYTES ||
+        entry.subItems.size() > VIRTUAL_ENTRY_MAX_COUNT - count - 1 ||
         (entry.type != VirtualEntryType::FILE && entry.type != VirtualEntryType::DIRECTORY) ||
         (entry.type == VirtualEntryType::FILE && (entry.size < 0 || !entry.subItems.empty()))) {
         return false;
@@ -389,24 +361,24 @@ bool VirtualEntryParcel::WriteNode(Parcel &parcel, const VirtualEntry &entry, ui
         return false;
     }
     for (const auto &child : entry.subItems) {
-        if (!WriteNode(parcel, child, count, depth + 1)) {
+        if (!WriteVirtualEntryNode(parcel, child, count, depth + 1)) {
             return false;
         }
     }
     return true;
 }
 
-bool VirtualEntryParcel::ReadNode(Parcel &parcel, VirtualEntry &entry, uint32_t &count, uint32_t depth)
+bool ReadVirtualEntryNode(Parcel &parcel, VirtualEntry &entry, uint32_t &count, uint32_t depth)
 {
-    if (depth > MAX_DEPTH || count >= MAX_COUNT) {
+    if (depth > VIRTUAL_ENTRY_MAX_DEPTH || count >= VIRTUAL_ENTRY_MAX_COUNT) {
         return false;
     }
     ++count;
     int32_t type = 0;
     uint32_t childCount = 0;
-    if (!parcel.ReadString(entry.id) || entry.id.size() > MAX_ID_BYTES || !parcel.ReadString(entry.name) ||
-        entry.name.size() > MAX_NAME_BYTES || !parcel.ReadInt32(type) || !parcel.ReadInt64(entry.modifyTime) ||
-        !parcel.ReadInt64(entry.size) || !parcel.ReadUint32(childCount) || childCount > MAX_COUNT - count ||
+    if (!parcel.ReadString(entry.id) || entry.id.size() > VIRTUAL_ENTRY_MAX_ID_BYTES || !parcel.ReadString(entry.name) ||
+        entry.name.size() > VIRTUAL_ENTRY_MAX_NAME_BYTES || !parcel.ReadInt32(type) || !parcel.ReadInt64(entry.modifyTime) ||
+        !parcel.ReadInt64(entry.size) || !parcel.ReadUint32(childCount) || childCount > VIRTUAL_ENTRY_MAX_COUNT - count ||
         type < static_cast<int32_t>(VirtualEntryType::FILE) ||
         type > static_cast<int32_t>(VirtualEntryType::DIRECTORY)) {
         return false;
@@ -418,11 +390,50 @@ bool VirtualEntryParcel::ReadNode(Parcel &parcel, VirtualEntry &entry, uint32_t 
     entry.subItems.reserve(childCount);
     for (uint32_t index = 0; index < childCount; ++index) {
         VirtualEntry child;
-        if (!ReadNode(parcel, child, count, depth + 1)) {
+        if (!ReadVirtualEntryNode(parcel, child, count, depth + 1)) {
             return false;
         }
         entry.subItems.emplace_back(std::move(child));
     }
     return true;
 }
-} // namespace OHOS::UDMF
+} // namespace
+
+template<>
+bool Marshalling(const VirtualEntry &entry, MessageParcel &parcel)
+{
+    Parcel payload;
+    uint32_t count = 0;
+    if (!payload.SetMaxCapacity(VIRTUAL_ENTRY_MAX_BYTES) || !WriteVirtualEntryNode(payload, entry, count, 0)) {
+        return false;
+    }
+    return parcel.WriteUint32(VIRTUAL_ENTRY_VERSION) &&
+        parcel.WriteUint32(static_cast<uint32_t>(payload.GetDataSize())) &&
+        parcel.WriteRawData(reinterpret_cast<const void *>(payload.GetData()), payload.GetDataSize());
+}
+
+template<>
+bool Unmarshalling(VirtualEntry &entry, MessageParcel &parcel)
+{
+    uint32_t version = 0;
+    uint32_t size = 0;
+    if (!parcel.ReadUint32(version) || version != VIRTUAL_ENTRY_VERSION || !parcel.ReadUint32(size) || size == 0 ||
+        size > VIRTUAL_ENTRY_MAX_BYTES) {
+        return false;
+    }
+    const void *bytes = parcel.ReadRawData(size);
+    Parcel payload;
+    // Decode an owned snapshot rather than a mapping writable by the remote process.
+    if (bytes == nullptr || !payload.SetMaxCapacity(VIRTUAL_ENTRY_MAX_BYTES) || !payload.WriteBuffer(bytes, size)) {
+        return false;
+    }
+    uint32_t count = 0;
+    VirtualEntry decoded;
+    if (!ReadVirtualEntryNode(payload, decoded, count, 0) || payload.GetReadableBytes() != 0) {
+        return false;
+    }
+    entry = std::move(decoded);
+    return true;
+}
+} // namespace ITypesUtil
+} // namespace OHOS

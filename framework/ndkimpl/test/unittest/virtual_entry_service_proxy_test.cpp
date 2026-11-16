@@ -21,7 +21,6 @@
 #include "iremote_stub.h"
 #include "virtual_entry.h"
 #include "udmf_types_util.h"
-#include "virtual_entry_parcel.h"
 
 using namespace testing::ext;
 
@@ -59,16 +58,12 @@ public:
         if (request.ReadInterfaceToken() != GetDescriptor()) {
             return -EACCES;
         }
-        if (code == static_cast<uint32_t>(UdmfServiceInterfaceCode::ROLLBACK_VIRTUAL_ENTRY)) {
-            receivedKey_ = request.ReadString();
-            return reply.WriteInt32(replyStatus_) ? E_OK : E_WRITE_PARCEL_ERROR;
-        }
         if (code != static_cast<uint32_t>(UdmfServiceInterfaceCode::REGISTER_VIRTUAL_ENTRY)) {
             return IPCObjectStub::OnRemoteRequest(code, request, reply, option);
         }
         receivedKey_ = request.ReadString();
         receivedRecordIndex_ = request.ReadUint32();
-        if (!VirtualEntryParcel::Read(request, receivedEntry_)) {
+        if (!ITypesUtil::Unmarshalling(receivedEntry_, request)) {
             return E_READ_PARCEL_ERROR;
         }
         receivedTreeBytes_ = request.GetRawDataSize();
@@ -248,21 +243,6 @@ HWTEST_F(VirtualEntryServiceProxyTest,
     EXPECT_NE(remote->receivedProvider_, nullptr);
 }
 
-/**
- * @tc.name: RollbackVirtualEntry_StatusRoundTrip_ReturnsServiceError
- * @tc.desc: The internal rollback preserves its key and propagates business failure.
- * @tc.type: FUNC
- * @tc.author: agent
- */
-HWTEST_F(VirtualEntryServiceProxyTest, RollbackVirtualEntry_StatusRoundTrip_ReturnsServiceError, TestSize.Level0)
-{
-    sptr<TestUdmfService> remote = new TestUdmfService();
-    remote->replyStatus_ = E_NO_PERMISSION;
-    UdmfServiceProxy proxy(remote->AsObject());
-    EXPECT_EQ(proxy.RollbackVirtualEntry("drag-key"), E_NO_PERMISSION);
-    EXPECT_EQ(remote->receivedKey_, "drag-key");
-    EXPECT_EQ(proxy.RollbackVirtualEntry(""), E_INVALID_PARAMETERS);
-}
 
 /**
  * @tc.name: RegisterVirtualEntry_4032FilesAtDepth63_RoundTripsEntireTree
