@@ -78,7 +78,6 @@ public:
     sptr<IRemoteObject> receivedProvider_;
     VirtualEntry receivedEntry_;
     size_t receivedTreeBytes_ = 0;
-
 };
 
 VirtualEntry MakeValidFileEntry()
