@@ -47,6 +47,7 @@ public:
     virtual int32_t PushDelayData(const std::string &, const UnifiedData &, Summary &) = 0;
     virtual int32_t GetDataIfAvailable(const std::string &key, const DataLoadInfo &, sptr<IRemoteObject>,
         std::shared_ptr<UnifiedData>) = 0;
+    virtual int32_t RollbackVirtualEntry(const std::string &) = 0;
     virtual int32_t RegisterVirtualEntry(
         const std::string &, uint32_t, const VirtualEntry &, sptr<IRemoteObject>) = 0;
 public:
@@ -74,6 +75,7 @@ public:
     MOCK_METHOD(int32_t, PushDelayData, (const std::string &, const UnifiedData &, Summary &));
     MOCK_METHOD(int32_t, GetDataIfAvailable, (const std::string &, const DataLoadInfo &, sptr<IRemoteObject>,
         std::shared_ptr<UnifiedData>));
+    MOCK_METHOD(int32_t, RollbackVirtualEntry, (const std::string &));
     MOCK_METHOD(int32_t, RegisterVirtualEntry,
         (const std::string &, uint32_t, const VirtualEntry &, sptr<IRemoteObject>));
 };

@@ -64,6 +64,7 @@ udmf_core_sources = [
   "${udmf_framework_path}/common/tlv_util.cpp",
   "${udmf_framework_path}/common/udmf_radar_reporter.cpp",
   "${udmf_framework_path}/common/udmf_types_util.cpp",
+  "${udmf_framework_path}/common/virtual_entry_parcel.h",
   "${udmf_framework_path}/common/udmf_utils.cpp",
   "${udmf_framework_path}/innerkitsimpl/client/getter_system.cpp",
   "${udmf_framework_path}/innerkitsimpl/common/unified_key.cpp",

@@ -186,6 +186,14 @@ int32_t UdmfServiceClient::GetDataIfAvailable(const std::string &key, const Data
     }
 }
 
+int32_t UdmfServiceClient::RollbackVirtualEntry(const std::string &key)
+{
+    if (MUdmfServiceClient::udmfServiceClient == nullptr) {
+        return E_ERROR;
+    }
+    return MUdmfServiceClient::udmfServiceClient->RollbackVirtualEntry(key);
+}
+
 int32_t UdmfServiceClient::RegisterVirtualEntry(const std::string &key, uint32_t recordIndex,
     const VirtualEntry &entry,
     sptr<IRemoteObject> provider)

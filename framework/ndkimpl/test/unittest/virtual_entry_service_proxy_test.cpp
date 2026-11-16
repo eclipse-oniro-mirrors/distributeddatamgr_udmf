@@ -20,6 +20,8 @@
 #include "gtest/gtest.h"
 #include "iremote_stub.h"
 #include "virtual_entry.h"
+#include "udmf_types_util.h"
+#include "virtual_entry_parcel.h"
 
 using namespace testing::ext;
 
@@ -57,12 +59,19 @@ public:
         if (request.ReadInterfaceToken() != GetDescriptor()) {
             return -EACCES;
         }
+        if (code == static_cast<uint32_t>(UdmfServiceInterfaceCode::ROLLBACK_VIRTUAL_ENTRY)) {
+            receivedKey_ = request.ReadString();
+            return reply.WriteInt32(replyStatus_) ? E_OK : E_WRITE_PARCEL_ERROR;
+        }
         if (code != static_cast<uint32_t>(UdmfServiceInterfaceCode::REGISTER_VIRTUAL_ENTRY)) {
             return IPCObjectStub::OnRemoteRequest(code, request, reply, option);
         }
         receivedKey_ = request.ReadString();
         receivedRecordIndex_ = request.ReadUint32();
-        ReadVirtualEntryFromParcel(request);
+        if (!VirtualEntryParcel::Read(request, receivedEntry_)) {
+            return E_READ_PARCEL_ERROR;
+        }
+        receivedTreeBytes_ = request.GetRawDataSize();
         receivedProvider_ = request.ReadRemoteObject();
         reply.WriteInt32(replyStatus_);
         return 0;
@@ -72,20 +81,9 @@ public:
     std::string receivedKey_;
     uint32_t receivedRecordIndex_ = 0;
     sptr<IRemoteObject> receivedProvider_;
+    VirtualEntry receivedEntry_;
+    size_t receivedTreeBytes_ = 0;
 
-private:
-    void ReadVirtualEntryFromParcel(MessageParcel &request)
-    {
-        (void)request.ReadString();
-        (void)request.ReadString();
-        (void)request.ReadInt32();
-        (void)request.ReadInt64();
-        (void)request.ReadInt64();
-        uint32_t childCount = request.ReadUint32();
-        for (uint32_t i = 0; i < childCount; ++i) {
-            ReadVirtualEntryFromParcel(request);
-        }
-    }
 };
 
 VirtualEntry MakeValidFileEntry()
@@ -220,5 +218,95 @@ HWTEST_F(VirtualEntryServiceProxyTest, RegisterVirtualEntry_NestedDirectory_Seri
     entry.subItems.push_back(nestedDir);
     EXPECT_EQ(proxy.RegisterVirtualEntry("key", 0, entry, remote->AsObject()), E_OK);
     EXPECT_EQ(remote->receivedKey_, "key");
+}
+
+/**
+ * @tc.name: RegisterVirtualEntry_MaximumNamesAndIds_TransfersMoreThanDefaultParcelCapacity
+ * @tc.desc: A legal 4096-node tree with maximum-length strings survives the real RawData round trip.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryServiceProxyTest,
+    RegisterVirtualEntry_MaximumNamesAndIds_TransfersMoreThanDefaultParcelCapacity, TestSize.Level0)
+{
+    VirtualEntry root;
+    root.name = "root";
+    root.type = VirtualEntryType::DIRECTORY;
+    for (uint32_t index = 0; index < 4095; ++index) {
+        auto file = MakeValidFileEntry();
+        file.id = std::string(1024, 'i');
+        const auto suffix = std::to_string(index);
+        file.name = std::string(255 - suffix.size(), 'f') + suffix;
+        root.subItems.emplace_back(std::move(file));
+    }
+    sptr<TestUdmfService> remote = new TestUdmfService();
+    UdmfServiceProxy proxy(remote->AsObject());
+    ASSERT_EQ(proxy.RegisterVirtualEntry("drag-key", 0, root, remote->AsObject()), E_OK);
+    ASSERT_EQ(remote->receivedEntry_.subItems.size(), root.subItems.size());
+    EXPECT_EQ(remote->receivedEntry_.subItems.front().id, root.subItems.front().id);
+    EXPECT_EQ(remote->receivedEntry_.subItems.back().name, root.subItems.back().name);
+    EXPECT_NE(remote->receivedProvider_, nullptr);
+}
+
+/**
+ * @tc.name: RollbackVirtualEntry_StatusRoundTrip_ReturnsServiceError
+ * @tc.desc: The internal rollback preserves its key and propagates business failure.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryServiceProxyTest, RollbackVirtualEntry_StatusRoundTrip_ReturnsServiceError, TestSize.Level0)
+{
+    sptr<TestUdmfService> remote = new TestUdmfService();
+    remote->replyStatus_ = E_NO_PERMISSION;
+    UdmfServiceProxy proxy(remote->AsObject());
+    EXPECT_EQ(proxy.RollbackVirtualEntry("drag-key"), E_NO_PERMISSION);
+    EXPECT_EQ(remote->receivedKey_, "drag-key");
+    EXPECT_EQ(proxy.RollbackVirtualEntry(""), E_INVALID_PARAMETERS);
+}
+
+/**
+ * @tc.name: RegisterVirtualEntry_4032FilesAtDepth63_RoundTripsEntireTree
+ * @tc.desc: Reproduce the reported legal 4095-node tree that exceeded the default 200 KiB parcel.
+ * @tc.type: FUNC
+ * @tc.author: agent
+ */
+HWTEST_F(VirtualEntryServiceProxyTest, RegisterVirtualEntry_4032FilesAtDepth63_RoundTripsEntireTree, TestSize.Level0)
+{
+    VirtualEntry root;
+    for (uint32_t level = 0; level < 63; ++level) {
+        VirtualEntry directory;
+        directory.type = VirtualEntryType::DIRECTORY;
+        directory.name = "level-" + std::to_string(level);
+        for (uint32_t index = 0; index < 64; ++index) {
+            auto file = MakeValidFileEntry();
+            const auto sequence = std::to_string(level * 64 + index);
+            file.id = "dir-file-" + sequence;
+            file.name = "file-" + sequence + ".bin";
+            directory.subItems.emplace_back(std::move(file));
+        }
+        if (level != 0) {
+            directory.subItems.emplace_back(std::move(root));
+        }
+        root = std::move(directory);
+    }
+    sptr<TestUdmfService> remote = new TestUdmfService();
+    UdmfServiceProxy proxy(remote->AsObject());
+    ASSERT_EQ(proxy.RegisterVirtualEntry("drag-key", 0, root, remote->AsObject()), E_OK);
+    EXPECT_GT(remote->receivedTreeBytes_, 200u * 1024);
+    const VirtualEntry *directory = &remote->receivedEntry_;
+    uint32_t files = 0;
+    for (uint32_t level = 0; level < 63; ++level) {
+        ASSERT_EQ(directory->type, VirtualEntryType::DIRECTORY);
+        ASSERT_EQ(directory->subItems.size(), level < 62 ? 65u : 64u);
+        for (uint32_t index = 0; index < 64; ++index) {
+            EXPECT_EQ(directory->subItems[index].type, VirtualEntryType::FILE);
+            EXPECT_EQ(directory->subItems[index].size, TEST_FILE_SIZE);
+            ++files;
+        }
+        if (level < 62) {
+            directory = &directory->subItems.back();
+        }
+    }
+    EXPECT_EQ(files, 4032u);
 }
 } // namespace OHOS::UDMF
