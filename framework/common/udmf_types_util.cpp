@@ -376,9 +376,10 @@ bool ReadVirtualEntryNode(Parcel &parcel, VirtualEntry &entry, uint32_t &count, 
     ++count;
     int32_t type = 0;
     uint32_t childCount = 0;
-    if (!parcel.ReadString(entry.id) || entry.id.size() > VIRTUAL_ENTRY_MAX_ID_BYTES || !parcel.ReadString(entry.name) ||
-        entry.name.size() > VIRTUAL_ENTRY_MAX_NAME_BYTES || !parcel.ReadInt32(type) || !parcel.ReadInt64(entry.modifyTime) ||
-        !parcel.ReadInt64(entry.size) || !parcel.ReadUint32(childCount) || childCount > VIRTUAL_ENTRY_MAX_COUNT - count ||
+    if (!parcel.ReadString(entry.id) || entry.id.size() > VIRTUAL_ENTRY_MAX_ID_BYTES ||
+        !parcel.ReadString(entry.name) || entry.name.size() > VIRTUAL_ENTRY_MAX_NAME_BYTES ||
+        !parcel.ReadInt32(type) || !parcel.ReadInt64(entry.modifyTime) || !parcel.ReadInt64(entry.size) ||
+        !parcel.ReadUint32(childCount) || childCount > VIRTUAL_ENTRY_MAX_COUNT - count ||
         type < static_cast<int32_t>(VirtualEntryType::FILE) ||
         type > static_cast<int32_t>(VirtualEntryType::DIRECTORY)) {
         return false;
