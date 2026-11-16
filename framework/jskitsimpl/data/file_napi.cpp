@@ -135,7 +135,7 @@ bool IsVirtualEntryProvider(napi_env env, napi_value value, bool &hasOnStat)
     if (!GetNamedProperty(env, value, "onRead", callback) || !IsFunction(env, callback)) {
         return false;
     }
-    if (napi_get_named_property(env, value, "onCancel", &callback) != napi_ok ||
+    if (!GetNamedProperty(env, value, "onCancel", callback) ||
         (!NapiDataUtils::IsUndefinedOrNull(env, callback) && !IsFunction(env, callback))) {
         return false;
     }
