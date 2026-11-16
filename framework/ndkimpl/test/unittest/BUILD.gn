@@ -165,6 +165,12 @@ ohos_unittest("UdsTest") {
 ohos_unittest("UdmfTest") {
   module_out_path = module_output_path
 
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
   sources = udmf_test_impl_sources + [
               "udmf_test.cpp",
               "virtual_entry_capi_test.cpp",
