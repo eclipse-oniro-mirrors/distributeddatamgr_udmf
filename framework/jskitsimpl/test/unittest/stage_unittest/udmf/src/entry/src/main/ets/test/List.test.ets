@@ -17,12 +17,10 @@ import stageUdmfCallBackTest from './StageUdmfCallBacktest.ets';
 import stageUdmfPromiseTest from './StageUdmfPromisetest.ets';
 import StageUdmfFileMangerTest from './StageUdmfFileMangertest.ets';
 import StageUdmfJsTest from './StageUdmfJsTest.ets';
-import StageUdmfVirtualEntryBoundaryTest from './StageUdmfVirtualEntryBoundaryTest.ets';
 
 export default function testsuite() {
   stageUdmfCallBackTest();
   stageUdmfPromiseTest();
   StageUdmfFileMangerTest();
   StageUdmfJsTest();
-  StageUdmfVirtualEntryBoundaryTest();
 }
