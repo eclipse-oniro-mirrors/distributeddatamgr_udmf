@@ -1402,15 +1402,17 @@ void OH_UdmfDataLoadInfo_SetType(OH_UdmfDataLoadInfo* dataLoadInfo, const char* 
         LOG_ERROR(UDMF_CAPI, "Types count exceeds limit.");
         return;
     }
+    if (dataLoadInfo->typesCount > 0 && dataLoadInfo->typesArray == nullptr) {
+        LOG_ERROR(UDMF_CAPI, "Types array is null with a nonzero types count.");
+        return;
+    }
     std::set<std::string> types;
     for (unsigned int i = 0; i < dataLoadInfo->typesCount; ++i) {
         types.insert(dataLoadInfo->typesArray[i]);
     }
     types.insert(type);
     std::vector<std::string> typeLabels {types.begin(), types.end()};
-    if (dataLoadInfo->typesArray != nullptr) {
-        NdkDataConversion::DestroyStringArray(dataLoadInfo->typesArray, dataLoadInfo->typesCount);
-    }
+    NdkDataConversion::DestroyStringArray(dataLoadInfo->typesArray, dataLoadInfo->typesCount);
     dataLoadInfo->typesArray = NdkDataConversion::StrVectorToTypesArray(typeLabels);
     if (dataLoadInfo->typesArray == nullptr) {
         dataLoadInfo->typesCount = 0;
