@@ -131,7 +131,7 @@ napi_status NapiDataUtils::GetValue(napi_env env, napi_value in, std::string &ou
         status = napi_get_value_string_utf8(env, in, buf, maxLen + STR_TAIL_LENGTH, &len);
         if (status == napi_ok) {
             buf[len] = 0;
-            out.assign(buf, len);
+            out = std::string(buf);
         }
         delete[] buf;
     } else {
