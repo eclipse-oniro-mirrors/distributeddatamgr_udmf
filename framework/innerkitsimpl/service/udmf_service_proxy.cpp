@@ -23,29 +23,6 @@
 
 namespace OHOS {
 namespace UDMF {
-namespace {
-constexpr uint32_t MAX_VIRTUAL_ENTRY_DEPTH = 64;
-constexpr uint32_t MAX_VIRTUAL_ENTRY_COUNT = 4096;
-
-bool WriteVirtualEntry(MessageParcel &parcel, const VirtualEntry &entry, uint32_t &count, uint32_t depth = 0)
-{
-    if (depth > MAX_VIRTUAL_ENTRY_DEPTH || count >= MAX_VIRTUAL_ENTRY_COUNT) {
-        return false;
-    }
-    ++count;
-    if (!parcel.WriteString(entry.id) || !parcel.WriteString(entry.name) ||
-        !parcel.WriteInt32(static_cast<int32_t>(entry.type)) || !parcel.WriteInt64(entry.modifyTime) ||
-        !parcel.WriteInt64(entry.size) || !parcel.WriteUint32(entry.subItems.size())) {
-        return false;
-    }
-    for (const auto &child : entry.subItems) {
-        if (!WriteVirtualEntry(parcel, child, count, depth + 1)) {
-            return false;
-        }
-    }
-    return true;
-}
-}
 #define IPC_SEND(code, reply, ...)                                                           \
     ({                                                                                       \
         int32_t ipcStatus = E_OK;                                                            \
@@ -357,16 +334,16 @@ int32_t UdmfServiceProxy::RegisterVirtualEntry(const std::string &key, uint32_t 
     MessageParcel request;
     MessageParcel reply;
     MessageOption option;
-    uint32_t entryCount = 0;
     if (!request.WriteInterfaceToken(GetDescriptor()) || !request.WriteString(key) ||
         !request.WriteUint32(recordIndex) ||
-        !WriteVirtualEntry(request, entry, entryCount) || !request.WriteRemoteObject(provider)) {
+        !ITypesUtil::Marshalling(entry, request) || !request.WriteRemoteObject(provider)) {
         return E_WRITE_PARCEL_ERROR;
     }
     if (SendRequest(UdmfServiceInterfaceCode::REGISTER_VIRTUAL_ENTRY, request, reply, option) != 0) {
         return E_IPC;
     }
-    return reply.ReadInt32();
+    int32_t status = E_ERROR;
+    return reply.ReadInt32(status) ? status : E_READ_PARCEL_ERROR;
 }
 } // namespace UDMF
 } // namespace OHOS

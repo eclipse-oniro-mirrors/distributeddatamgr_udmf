@@ -442,11 +442,12 @@ HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_SetDataSuccessRegister
 }
 
 /**
- * @tc.name: SetData_DragVirtualEntry_RegisterFailure_RollsBackDeleteData
- * @tc.desc: Verify a failed RegisterVirtualEntry triggers a DeleteData rollback.
+ * @tc.name: SetData_DragVirtualEntry_RegisterFailure_ReturnsErrorAndClearsKey
+ * @tc.desc: Verify failed registration returns the original error and clears the failed key.
  * @tc.type: FUNC
+ * @tc.author: agent
  */
-HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_RollsBackDeleteData, TestSize.Level1)
+HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_ReturnsErrorAndClearsKey, TestSize.Level1)
 {
     auto file = std::make_shared<File>();
     AttachmentOwner owner;
@@ -457,9 +458,10 @@ HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_RollsB
     EXPECT_CALL(*mock_, GetInstance()).WillRepeatedly(Return(serviceClient));
     EXPECT_CALL(*mock_, GetAppShareOption(_, _))
         .WillOnce(DoAll(SetArgReferee<1>(static_cast<int32_t>(ShareOptions::CROSS_DEVICE)), Return(E_OK)));
-    EXPECT_CALL(*mock_, SetData(_, _, _, _)).WillOnce(Return(E_OK));
-    EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).WillOnce(Return(E_ERROR));
-    EXPECT_CALL(*mock_, DeleteData(_, _)).WillOnce(Return(E_OK));
+    EXPECT_CALL(*mock_, SetData(_, _, _, _))
+        .WillOnce(DoAll(SetArgReferee<3>(std::string("failed-drag-key")), Return(E_OK)));
+    EXPECT_CALL(*mock_, RegisterVirtualEntry(_, _, _, _)).WillOnce(Return(E_WRITE_PARCEL_ERROR));
+    EXPECT_CALL(*mock_, DeleteData(_, _)).Times(0);
 
     UdmfClient client;
     UnifiedData unifiedData;
@@ -467,7 +469,8 @@ HWTEST_F(UdmfClientAbnormalTest, SetData_DragVirtualEntry_RegisterFailure_RollsB
     CustomOption option;
     option.intention = Intention::UD_INTENTION_DRAG;
     std::string key;
-    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_ERROR);
+    EXPECT_EQ(client.SetData(option, unifiedData, key), Status::E_WRITE_PARCEL_ERROR);
+    EXPECT_TRUE(key.empty());
 }
 
 /**

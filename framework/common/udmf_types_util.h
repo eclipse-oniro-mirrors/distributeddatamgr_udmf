@@ -22,10 +22,12 @@
 #include "unified_meta.h"
 #include "unified_types.h"
 #include "async_task_params.h"
+#include "virtual_entry.h"
 
 namespace OHOS {
 namespace ITypesUtil {
 using UnifiedData = UDMF::UnifiedData;
+using VirtualEntry = UDMF::VirtualEntry;
 using Summary = UDMF::Summary;
 using Privilege = UDMF::Privilege;
 using CustomOption = UDMF::CustomOption;
@@ -90,6 +92,10 @@ template<>
 bool API_EXPORT Marshalling(const DataLoadInfo &input, MessageParcel &parcel);
 template<>
 bool API_EXPORT Unmarshalling(DataLoadInfo &output, MessageParcel &parcel);
+template<>
+bool API_EXPORT Marshalling(const VirtualEntry &input, MessageParcel &parcel);
+template<>
+bool API_EXPORT Unmarshalling(VirtualEntry &output, MessageParcel &parcel);
 } // namespace ITypesUtil
 } // namespace OHOS
 #endif // UDMF_TYPES_UTIL_H
