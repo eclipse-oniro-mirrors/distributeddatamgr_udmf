@@ -77,8 +77,13 @@ Status DataParamsConversion::GetDataLoaderParams(const OH_UdmfDataLoadParams &nd
     };
     dataLoadParams.loadHandler = [ndkDataParams](const std::string &udKey, const DataLoadInfo &dataLoadInfo) {
         std::vector<std::string> types(dataLoadInfo.types.begin(), dataLoadInfo.types.end());
+        char **typesArray = NdkDataConversion::StrVectorToTypesArray(types);
+        if (typesArray == nullptr && !types.empty()) {
+            LOG_ERROR(UDMF_CAPI, "Failed to convert data load types.");
+            return;
+        }
         OH_UdmfDataLoadInfo ndkDataLoadInfo {
-            .typesArray = NdkDataConversion::StrVectorToTypesArray(types),
+            .typesArray = typesArray,
             .typesCount = types.size(),
             .recordsCount = dataLoadInfo.recordCount,
         };
