@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_set>
 
 #include "napi/native_api.h"
@@ -26,6 +27,7 @@
 namespace OHOS::UDMF {
 class File;
 
+bool ParseVirtualEntryString(napi_env env, napi_value value, std::string &text);
 bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size);
 
 class VirtualEntryNapiRegistry final {

@@ -56,9 +56,9 @@ bool ParseCommonFields(napi_env env, napi_value value, VirtualEntry &item, std::
 {
     napi_value property = nullptr;
     return GetNamedProperty(env, value, "name", property) &&
-           NapiDataUtils::GetValue(env, property, item.name) == napi_ok && IsValidName(item.name) &&
+           ParseVirtualEntryString(env, property, item.name) && IsValidName(item.name) &&
            GetNamedProperty(env, value, "type", property) &&
-           NapiDataUtils::GetValue(env, property, itemType) == napi_ok &&
+           ParseVirtualEntryString(env, property, itemType) &&
            GetNamedProperty(env, value, "modifyTime", property) &&
            NapiDataUtils::GetValue(env, property, item.modifyTime) == napi_ok;
 }
@@ -68,7 +68,7 @@ bool ParseVirtualFile(napi_env env, napi_value value, VirtualEntry &item)
     napi_value property = nullptr;
     item.type = VirtualEntryType::FILE;
     if (!GetNamedProperty(env, value, "id", property) ||
-        NapiDataUtils::GetValue(env, property, item.id) != napi_ok || item.id.empty() ||
+        !ParseVirtualEntryString(env, property, item.id) || item.id.empty() ||
         item.id.size() > MAX_VIRTUAL_ENTRY_ID_BYTES) {
         return false;
     }

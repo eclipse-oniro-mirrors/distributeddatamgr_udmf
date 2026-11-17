@@ -52,11 +52,11 @@ bool ParseStat(napi_env env, napi_value value, VirtualEntry &entry)
     napi_value field = nullptr;
     std::string type;
     if (napi_get_named_property(env, value, "id", &field) != napi_ok ||
-        NapiDataUtils::GetValue(env, field, entry.id) != napi_ok ||
+        !ParseVirtualEntryString(env, field, entry.id) ||
         napi_get_named_property(env, value, "name", &field) != napi_ok ||
-        NapiDataUtils::GetValue(env, field, entry.name) != napi_ok ||
+        !ParseVirtualEntryString(env, field, entry.name) ||
         napi_get_named_property(env, value, "type", &field) != napi_ok ||
-        NapiDataUtils::GetValue(env, field, type) != napi_ok || type != "file" ||
+        !ParseVirtualEntryString(env, field, type) || type != "file" ||
         napi_get_named_property(env, value, "modifyTime", &field) != napi_ok ||
         NapiDataUtils::GetValue(env, field, entry.modifyTime) != napi_ok) {
         return false;

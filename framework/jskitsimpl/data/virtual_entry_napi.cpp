@@ -17,6 +17,7 @@
 
 #include <cmath>
 #include <limits>
+#include <new>
 
 #include "file.h"
 #include "napi_data_utils.h"
@@ -24,6 +25,24 @@
 #include "virtual_entry_attachment_registry.h"
 
 namespace OHOS::UDMF {
+bool ParseVirtualEntryString(napi_env env, napi_value value, std::string &text)
+{
+    size_t length = 0;
+    if (napi_get_value_string_utf8(env, value, nullptr, 0, &length) != napi_ok ||
+        length == std::numeric_limits<size_t>::max()) {
+        return false;
+    }
+    std::unique_ptr<char[]> buffer(new (std::nothrow) char[length + 1]);
+    size_t copied = 0;
+    if (buffer == nullptr ||
+        napi_get_value_string_utf8(env, value, buffer.get(), length + 1, &copied) != napi_ok || copied > length) {
+        return false;
+    }
+    // Preserve embedded NUL bytes so virtual-entry validation sees the complete input.
+    text.assign(buffer.get(), copied);
+    return true;
+}
+
 bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size)
 {
     double number = 0;
