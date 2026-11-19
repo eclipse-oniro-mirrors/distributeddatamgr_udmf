@@ -40,6 +40,9 @@ private:
     static napi_status HandlePromise(napi_env env, napi_value promise, std::unique_ptr<DataLoadArgs> data);
     static napi_value PromiseThenHandler(napi_env env, napi_callback_info info);
     static napi_value PromiseCatchHandler(napi_env env, napi_callback_info info);
+    static void DataLoadArgsFinalizer(napi_env env, void *data, void *hint);
+    static napi_status CreatePromiseHandler(napi_env env, const char *name, napi_callback cb,
+        DataLoadArgs *args, napi_value &handler);
     static int32_t HandleUnifiedData(napi_env env, std::string udKey, napi_value data);
     static ConcurrentMap<std::string, napi_threadsafe_function> tsfns_;
     static void AssignDataLoadParams(DataLoadParams &dataLoadParams);

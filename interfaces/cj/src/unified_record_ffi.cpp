@@ -287,6 +287,9 @@ int64_t FfiUDMFPlainTextSetAbstract(int64_t id, const char *abstr)
 
 FFI_EXPORT void FfiUDMFFreeCjValueType(CJValueType *val)
 {
+    if (val == nullptr) {
+        return;
+    }
     if (val->string != nullptr) {
         free(val->string);
         val->string = nullptr;
@@ -300,6 +303,9 @@ FFI_EXPORT void FfiUDMFFreeCjValueType(CJValueType *val)
 
 FFI_EXPORT void FfiUDMFFreeCRecord(CRecord *record)
 {
+    if (record == nullptr) {
+        return;
+    }
     Utils::FreeCArrString(record->keys);
     Utils::FreeCArrString(record->values);
     record->keys.head = nullptr;

@@ -94,6 +94,22 @@ void DataLoadParamsNapi::CallDataLoadHandler(napi_env env, napi_value callback, 
     HandlePromise(env, result, std::move(infoArgs));
 }
 
+napi_status DataLoadParamsNapi::CreatePromiseHandler(napi_env env, const char *name, napi_callback cb,
+    DataLoadArgs *args, napi_value &handler)
+{
+    auto status = napi_create_function(env, name, NAPI_AUTO_LENGTH, cb, args, &handler);
+    if (status != napi_ok) {
+        LOG_ERROR(UDMF_KITS_NAPI, "napi_create_function %{public}s failed, status=%{public}d", name, status);
+        return status;
+    }
+    status = napi_add_finalizer(env, handler, args, DataLoadArgsFinalizer, nullptr, nullptr);
+    if (status != napi_ok) {
+        LOG_ERROR(UDMF_KITS_NAPI, "napi_add_finalizer %{public}s failed, status=%{public}d", name, status);
+        return status;
+    }
+    return napi_ok;
+}
+
 napi_status DataLoadParamsNapi::HandlePromise(napi_env env, napi_value promise, std::unique_ptr<DataLoadArgs> data)
 {
     napi_value thenName;
@@ -108,39 +124,41 @@ napi_status DataLoadParamsNapi::HandlePromise(napi_env env, napi_value promise, 
         LOG_ERROR(UDMF_KITS_NAPI, "napi_get_property failed, status=%{public}d", status);
         return status;
     }
-    napi_value thenHandler;
-    DataLoadArgs *args = data.release();
-    napi_create_function(env, "asyncThen", NAPI_AUTO_LENGTH, PromiseThenHandler, args, &thenHandler);
+    DataLoadArgs *thenArgs = data.release();
+    auto *catchArgs = new (std::nothrow) DataLoadArgs(*thenArgs);
+    if (catchArgs == nullptr) {
+        LOG_ERROR(UDMF_KITS_NAPI, "No memory for catchArgs.");
+        delete thenArgs;
+        return napi_generic_failure;
+    }
+    napi_value thenHandler = nullptr;
+    status = CreatePromiseHandler(env, "asyncThen", PromiseThenHandler, thenArgs, thenHandler);
     if (status != napi_ok) {
-        LOG_ERROR(UDMF_KITS_NAPI, "napi_create_function asyncThen failed, status=%{public}d", status);
-        delete args;
+        delete thenArgs;
+        delete catchArgs;
         return status;
     }
-    napi_value catchHandler;
-    napi_create_function(env, "asyncCatch", NAPI_AUTO_LENGTH, PromiseCatchHandler, args, &catchHandler);
+    napi_value catchHandler = nullptr;
+    status = CreatePromiseHandler(env, "asyncCatch", PromiseCatchHandler, catchArgs, catchHandler);
     if (status != napi_ok) {
-        LOG_ERROR(UDMF_KITS_NAPI, "napi_create_function asyncCatch failed, status=%{public}d", status);
-        delete args;
+        delete catchArgs;
         return status;
     }
-    size_t argsSize = 2;
-    napi_value thenArgs[2] = { thenHandler, catchHandler };
-    status = napi_call_function(env, promise, thenFunc, argsSize, thenArgs, NULL);
+    napi_value handlers[2] = { thenHandler, catchHandler };
+    status = napi_call_function(env, promise, thenFunc, 2, handlers, NULL);
     if (status != napi_ok) {
         LOG_ERROR(UDMF_KITS_NAPI, "Call then failed, status=%{public}d", status);
-        delete args;
-        return status;
     }
-    return napi_ok;
+    return status;
 }
 
 napi_value DataLoadParamsNapi::PromiseThenHandler(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
     napi_value args[1];
-    std::unique_ptr<DataLoadArgs> infoArgs;
-    auto status = napi_get_cb_info(env, info, &argc, args, NULL, (void **)&infoArgs);
-    if (status != napi_ok || !infoArgs) {
+    DataLoadArgs *infoArgs = nullptr;
+    auto status = napi_get_cb_info(env, info, &argc, args, NULL, reinterpret_cast<void **>(&infoArgs));
+    if (status != napi_ok || infoArgs == nullptr) {
         LOG_ERROR(UDMF_KITS_NAPI, "napi_get_cb_info failed, status=%{public}d", status);
         return NULL;
     }
@@ -155,12 +173,19 @@ napi_value DataLoadParamsNapi::PromiseCatchHandler(napi_env env, napi_callback_i
 {
     size_t argc = 1;
     napi_value args[1];
-    std::unique_ptr<DataLoadArgs> infoArgs;
-    auto status = napi_get_cb_info(env, info, &argc, args, NULL, (void **)&infoArgs);
+    DataLoadArgs *infoArgs = nullptr;
+    auto status = napi_get_cb_info(env, info, &argc, args, NULL, reinterpret_cast<void **>(&infoArgs));
     if (status != napi_ok) {
         LOG_ERROR(UDMF_KITS_NAPI, "napi_get_cb_info failed, status=%{public}d", status);
     }
     return NULL;
+}
+
+void DataLoadParamsNapi::DataLoadArgsFinalizer(napi_env env, void *data, void *hint)
+{
+    (void)env;
+    (void)hint;
+    delete static_cast<DataLoadArgs *>(data);
 }
 
 int32_t DataLoadParamsNapi::HandleUnifiedData(napi_env env, std::string udKey, napi_value data)

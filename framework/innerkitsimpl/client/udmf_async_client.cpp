@@ -161,6 +161,9 @@ Status UdmfAsyncClient::ProgressTask(const std::string &businessUdKey)
     }
     auto lastUpdateTime = std::chrono::steady_clock::now();
     while (asyncHelper->lastProgress >= PROGRESS_INIT && asyncHelper->lastProgress < PROGRESS_ALL_FINISHED) {
+        if (asyncHelper->progressQueue.IsCancel()) {
+            break;
+        }
         auto pair = asyncHelper->progressQueue.Poll();
         if (!pair.first) {
             std::this_thread::sleep_for(std::chrono::milliseconds(READ_PROGRESS_INTERVAL));
@@ -289,7 +292,7 @@ Status UdmfAsyncClient::CheckSync(std::shared_ptr<AsyncHelper> asyncHelper, cons
     auto status = serviceClient->ObtainAsynProcess(processInfo);
     if (status != E_OK) {
         LOG_ERROR(UDMF_CLIENT, "Sync error status = %{public}d!", status);
-        ProgressInfo progressInfo = { .progress = PROGRESS_ERROR, .errorCode = E_ERROR };
+        ProgressInfo progressInfo = { .progress = PROGRESS_ERROR, .errorCode = static_cast<Status>(status) };
         CallProgress(asyncHelper, progressInfo, nullptr);
         return static_cast<Status>(status);
     }
@@ -317,45 +320,50 @@ Status UdmfAsyncClient::CheckSync(std::shared_ptr<AsyncHelper> asyncHelper, cons
     return E_OK;
 }
 
-void UdmfAsyncClient::HandleDelayDataError(
-    const std::string &key, const std::weak_ptr<AsyncHelper> &expected, int32_t status)
+std::shared_ptr<AsyncHelper> UdmfAsyncClient::GetValidAsyncHelper(
+    const std::string &key, const std::weak_ptr<AsyncHelper> &expected)
 {
     auto pending = expected.lock();
     if (pending == nullptr) {
-        return;
+        return nullptr;
     }
     auto &client = UdmfAsyncClient::GetInstance();
-    {
-        std::lock_guard<std::mutex> lock(client.mutex_);
-        auto it = client.asyncHelperMap_.find(key);
-        if (it == client.asyncHelperMap_.end() || it->second != pending) {
-            return;
-        }
+    std::lock_guard<std::mutex> lock(client.mutex_);
+    auto it = client.asyncHelperMap_.find(key);
+    if (it == client.asyncHelperMap_.end() || it->second != pending) {
+        return nullptr;
+    }
+    return pending;
+}
+
+void UdmfAsyncClient::HandleDelayDataError(
+    const std::string &key, const std::weak_ptr<AsyncHelper> &expected, int32_t status)
+{
+    auto pending = GetValidAsyncHelper(key, expected);
+    if (pending == nullptr) {
+        return;
     }
     ProgressInfo progressInfo = { .progress = PROGRESS_ERROR, .errorCode = static_cast<Status>(status) };
-    client.CallProgress(pending, progressInfo, nullptr);
+    GetInstance().CallProgress(pending, progressInfo, nullptr);
+}
+
+void UdmfAsyncClient::HandleDelayData(
+    const std::string &key, const std::weak_ptr<AsyncHelper> &expected, const UnifiedData &unifiedData)
+{
+    auto pending = GetValidAsyncHelper(key, expected);
+    if (pending == nullptr) {
+        return;
+    }
+    *(pending->data) = unifiedData;
+    GetInstance().ProcessUnifiedData(pending);
 }
 
 Status UdmfAsyncClient::GetDataFromDB(std::shared_ptr<AsyncHelper> asyncHelper, const QueryOption &query)
 {
     auto &data = *(asyncHelper->data);
-    auto delayDataCallback = [this](const std::string &key, const UnifiedData &unifiedData) {
-        std::shared_ptr<AsyncHelper> asyncHelperPtr;
-        {
-            std::lock_guard<std::mutex> lockMap(mutex_);
-            auto item = asyncHelperMap_.find(key);
-            if (item == asyncHelperMap_.end()) {
-                LOG_ERROR(UDMF_CLIENT, "No task exist, key=%{public}s", key.c_str());
-                return;
-            }
-            asyncHelperPtr = item->second;
-        }
-        if (asyncHelperPtr == nullptr) {
-            LOG_ERROR(UDMF_CLIENT, "asyncHelperPtr is nullptr");
-            return;
-        }
-        *(asyncHelperPtr->data) = unifiedData;
-        UdmfAsyncClient::GetInstance().ProcessUnifiedData(asyncHelperPtr);
+    auto delayDataCallback = [expected = std::weak_ptr<AsyncHelper>(asyncHelper)](
+                                 const std::string &key, const UnifiedData &unifiedData) {
+        HandleDelayData(key, expected, unifiedData);
     };
     auto delayDataError = [key = query.key, expected = std::weak_ptr<AsyncHelper>(asyncHelper)](
                               int32_t status) { HandleDelayDataError(key, expected, status); };
