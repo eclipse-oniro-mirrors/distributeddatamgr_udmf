@@ -130,6 +130,20 @@ HWTEST_F(UnifiedDataTest, GetGroupId001, TestSize.Level1)
 }
 
 /**
+ * @tc.name: GetGroupId002
+ * @tc.desc: Abnormal testcase of GetGroupId with null runtime
+ * @tc.type: FUNC
+ */
+HWTEST_F(UnifiedDataTest, GetGroupId002, TestSize.Level1)
+{
+    LOG_INFO(UDMF_TEST, "GetGroupId002 begin.");
+    UnifiedData unifiedData;
+    std::string ret = unifiedData.GetGroupId();
+    EXPECT_TRUE(ret.empty());
+    LOG_INFO(UDMF_TEST, "GetGroupId002 end.");
+}
+
+/**
 * @tc.name: GetRuntime001
 * @tc.desc: Normal testcase of GetRuntime
 * @tc.type: FUNC
