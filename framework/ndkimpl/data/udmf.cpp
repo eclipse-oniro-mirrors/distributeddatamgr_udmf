@@ -71,7 +71,7 @@ static void DestroyUnifiedRecordArray(OH_UdmfRecord**& records, unsigned int& co
     for (unsigned int i = 0; i < count; i++) {
         if (records[i] != nullptr) {
             if (records[i]->recordData != nullptr) {
-                delete records[i]->recordData;
+                delete[] records[i]->recordData;
                 records[i]->recordData = nullptr;
             }
             NdkDataConversion::DestroyStringArray(records[i]->typesArray, records[i]->typesCount);
@@ -175,7 +175,10 @@ int OH_UdmfData_AddRecord(OH_UdmfData* unifiedData, OH_UdmfRecord* record)
     if (!IsUnifiedDataValid(unifiedData) || !IsUnifiedRecordValid(record)) {
         return UDMF_E_INVALID_PARAM;
     }
+    std::lock_guard<std::mutex> lock(unifiedData->mutex);
     unifiedData->unifiedData_->AddRecord(record->record_);
+    NdkDataConversion::DestroyStringArray(unifiedData->typesArray, unifiedData->typesCount);
+    DestroyUnifiedRecordArray(unifiedData->records, unifiedData->recordsCount);
     return UDMF_E_OK;
 }
 

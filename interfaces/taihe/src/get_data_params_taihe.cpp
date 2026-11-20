@@ -160,6 +160,7 @@ bool GetDataParamsTaihe::SetProgressListener(ani_env *env, GetDataParams &getDat
             ani_options aniArgs {0, nullptr};
             if (vm == nullptr) {
                 LOG_ERROR(UDMF_ANI, "vm is null.");
+                return false;
             }
             auto status = vm->AttachCurrentThread(&aniArgs, ANI_VERSION_1, &workerEnv);
             if (status != ANI_OK) {

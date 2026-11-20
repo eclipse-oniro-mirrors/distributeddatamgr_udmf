@@ -16,6 +16,7 @@
 #define LOG_TAG "UtdCfgsCheckerTest"
 
 #include "utd_cfgs_checker.h"
+#include "utd_graph.h"
 #include <gtest/gtest.h>
 #include "logger.h"
 
@@ -36,6 +37,20 @@ void UtdCfgsCheckerTest::SetUpTestCase(void) {}
 void UtdCfgsCheckerTest::TearDownTestCase(void) {}
 void UtdCfgsCheckerTest::SetUp(void) {}
 void UtdCfgsCheckerTest::TearDown(void) {}
+
+/**
+ * @tc.name: UtdGraph_IsValidType_001
+ * @tc.desc: Abnormal testcase of UtdGraph::IsValidType with uninitialized graph
+ * @tc.type: FUNC
+ */
+HWTEST_F(UtdCfgsCheckerTest, UtdGraph_IsValidType_001, TestSize.Level1)
+{
+    LOG_INFO(UDMF_TEST, "UtdGraph_IsValidType_001 begin.");
+    auto &graph = UtdGraph::GetInstance();
+    graph.Update(nullptr);
+    EXPECT_FALSE(graph.IsValidType("general.text"));
+    LOG_INFO(UDMF_TEST, "UtdGraph_IsValidType_001 end.");
+}
 
 /**
  * @tc.name: CheckTypeDescriptors_001

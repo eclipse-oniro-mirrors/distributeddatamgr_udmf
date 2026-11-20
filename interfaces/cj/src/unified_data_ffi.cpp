@@ -138,6 +138,9 @@ void FfiUDMFSetProperties(int64_t unifiedDataId, CUnifiedDataProperties properti
 
 FFI_EXPORT void FfiUDMFFreeDataProperties(CUnifiedDataProperties *properties)
 {
+    if (properties == nullptr) {
+        return;
+    }
     CParameters *p = properties->extras.head;
     for (int64_t i = 0; i < properties->extras.size; i++) {
         free(p[i].key);
@@ -153,6 +156,9 @@ FFI_EXPORT void FfiUDMFFreeDataProperties(CUnifiedDataProperties *properties)
 
 FFI_EXPORT void FfiUDMFFreeCArrString(CArrString *arrStr)
 {
+    if (arrStr == nullptr) {
+        return;
+    }
     Utils::FreeCArrString(*arrStr);
 }
 }
