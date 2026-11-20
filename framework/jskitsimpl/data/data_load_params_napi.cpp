@@ -144,8 +144,9 @@ napi_status DataLoadParamsNapi::HandlePromise(napi_env env, napi_value promise, 
         delete catchArgs;
         return status;
     }
+    size_t argsSize = 2;
     napi_value handlers[2] = { thenHandler, catchHandler };
-    status = napi_call_function(env, promise, thenFunc, 2, handlers, NULL);
+    status = napi_call_function(env, promise, thenFunc, argsSize, handlers, NULL);
     if (status != napi_ok) {
         LOG_ERROR(UDMF_KITS_NAPI, "Call then failed, status=%{public}d", status);
     }
