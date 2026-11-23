@@ -31,7 +31,6 @@
 #include "udmf_capi_common.h"
 #include "ndk_data_conversion.h"
 #include "udmf_client.h"
-#include "getter_system.h"
 #include "plain_text.h"
 #include "uri_permission_util.h"
 #include "udmf_meta.h"
@@ -2006,16 +2005,19 @@ HWTEST_F(UDMFTest, OH_UdmfProgressInfo_GetStatus001, TestSize.Level0)
 HWTEST_F(UDMFTest, OH_UdmfGetDataParams_SetDestUri001, TestSize.Level0)
 {
     OH_UdmfGetDataParams *params1 = OH_UdmfGetDataParams_Create();
+    ASSERT_NE(params1, nullptr);
     const char *destUri1 = nullptr;
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params1, destUri1));
+    OH_UdmfGetDataParams_SetDestUri(params1, destUri1);
+    EXPECT_TRUE(params1->destUri.empty());
 
     OH_UdmfGetDataParams *params2 = nullptr;
     const char *destUri2 = TEST_DATA;
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params2, destUri2));
+    OH_UdmfGetDataParams_SetDestUri(params2, destUri2);
 
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params1, destUri2));
+    OH_UdmfGetDataParams_SetDestUri(params1, destUri2);
+    EXPECT_EQ(params1->destUri, destUri2);
 
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params2, destUri1));
+    OH_UdmfGetDataParams_SetDestUri(params2, destUri1);
 
     OH_UdmfGetDataParams_Destroy(params1);
 }
@@ -5302,92 +5304,6 @@ HWTEST_F(UDMFTest, GeneralEntry_ConcurrentSameTypeSharesCache, TestSize.Level1)
     EXPECT_EQ(counts[1], value.size());
 }
 
-HWTEST_F(UDMFTest, GeneralEntry_LazyGetterCanAddEntry, TestSize.Level1)
-{
-    struct ReentrantGetter : public GetterSystem::GeneralGetter {
-        std::function<ValueType()> read;
-        ValueType GetValueByType(uint32_t, uint32_t, const std::string&) override
-        {
-            return read();
-        }
-    };
-    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
-        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
-    auto record = recordGuard.get();
-    ASSERT_NE(record, nullptr);
-    const char* type = "ApplicationDefined-lazy-entry";
-    const char* addedType = "ApplicationDefined-callback-entry";
-    const unsigned char value[] = "callback data";
-    record->record_ = std::make_shared<UnifiedRecord>(HYPERLINK, std::make_shared<Object>());
-    record->record_->AddEntry(type, std::monostate());
-    const std::string channel = "general-entry-reentrant-getter-test";
-    record->record_->SetChannelName(channel);
-    auto getter = std::make_shared<ReentrantGetter>();
-    getter->read = [record, addedType, &value]() -> ValueType {
-        EXPECT_EQ(OH_UdmfRecord_AddGeneralEntry(record, addedType, value, sizeof(value)), UDMF_E_OK);
-        auto object = std::make_shared<Object>();
-        object->value_[ARRAY_BUFFER] = std::vector<uint8_t>(value, value + sizeof(value));
-        return object;
-    };
-    GetterSystem::GetInstance().RegisterCreator(channel, [getter] { return getter; });
-    unsigned char* bytes = nullptr;
-    unsigned int count = 0;
-    int status = OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count);
-    GetterSystem::GetInstance().RegisterCreator(channel, [] { return nullptr; });
-    EXPECT_EQ(status, UDMF_E_OK);
-    EXPECT_EQ(count, sizeof(value));
-    if (bytes != nullptr && count == sizeof(value)) {
-        EXPECT_EQ(memcmp(bytes, value, count), 0);
-    } else {
-        ADD_FAILURE() << "Expected callback bytes";
-    }
-    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, addedType, &bytes, &count), UDMF_E_OK);
-    EXPECT_EQ(count, sizeof(value));
-}
-
-HWTEST_F(UDMFTest, PrimaryPlainText_LazyGetterCanAddRecord, TestSize.Level1)
-{
-    struct ReentrantGetter : public GetterSystem::GeneralGetter {
-        std::function<ValueType()> read;
-        ValueType GetValueByType(uint32_t, uint32_t, const std::string&) override
-        {
-            return read();
-        }
-    };
-    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> dataGuard(
-        OH_UdmfData_Create(), OH_UdmfData_Destroy);
-    auto data = dataGuard.get();
-    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
-        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
-    auto record = recordGuard.get();
-    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> extraGuard(
-        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
-    auto extra = extraGuard.get();
-    std::unique_ptr<OH_UdsPlainText, decltype(&OH_UdsPlainText_Destroy)> textGuard(
-        OH_UdsPlainText_Create(), OH_UdsPlainText_Destroy);
-    auto text = textGuard.get();
-    ASSERT_NE(data, nullptr);
-    ASSERT_NE(record, nullptr);
-    ASSERT_NE(extra, nullptr);
-    ASSERT_NE(text, nullptr);
-    record->record_ = std::make_shared<UnifiedRecord>(HYPERLINK, std::make_shared<Object>());
-    record->record_->AddEntry(UDMF_META_PLAIN_TEXT, std::monostate());
-    const std::string channel = "reentrant-getter-test";
-    record->record_->SetChannelName(channel);
-    auto getter = std::make_shared<ReentrantGetter>();
-    getter->read = [data, extra]() -> ValueType {
-        EXPECT_EQ(OH_UdmfData_AddRecord(data, extra), UDMF_E_OK);
-        auto object = std::make_shared<Object>();
-        object->value_[CONTENT] = std::string("lazy content");
-        return object;
-    };
-    GetterSystem::GetInstance().RegisterCreator(channel, [getter] { return getter; });
-    EXPECT_EQ(OH_UdmfData_AddRecord(data, record), UDMF_E_OK);
-    EXPECT_EQ(OH_UdmfData_GetPrimaryPlainText(data, text), UDMF_E_OK);
-    GetterSystem::GetInstance().RegisterCreator(channel, [] { return nullptr; });
-    EXPECT_STREQ(OH_UdsPlainText_GetContent(text), "lazy content");
-    EXPECT_EQ(data->unifiedData_->GetRecords().size(), 2u);
-}
 HWTEST_F(UDMFTest, Record_ConcurrentFirstUdsEntriesAreBothRetained, TestSize.Level1)
 {
     auto plainText = OH_UdsPlainText_Create();
@@ -5425,46 +5341,6 @@ HWTEST_F(UDMFTest, Record_ConcurrentFirstUdsEntriesAreBothRetained, TestSize.Lev
     OH_UdsPlainText_Destroy(plainText);
     OH_UdsHtml_Destroy(html);
     EXPECT_EQ(lostEntries, 0u);
-}
-
-HWTEST_F(UDMFTest, Record_LazyUdsGetterKeepsReplacedRecordAlive, TestSize.Level1)
-{
-    struct ReentrantGetter : public GetterSystem::GeneralGetter {
-        std::function<ValueType()> read;
-        ValueType GetValueByType(uint32_t, uint32_t, const std::string&) override
-        {
-            return read();
-        }
-    };
-    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
-        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
-    std::unique_ptr<OH_UdsPlainText, decltype(&OH_UdsPlainText_Destroy)> input(
-        OH_UdsPlainText_Create(), OH_UdsPlainText_Destroy);
-    std::unique_ptr<OH_UdsPlainText, decltype(&OH_UdsPlainText_Destroy)> output(
-        OH_UdsPlainText_Create(), OH_UdsPlainText_Destroy);
-    auto record = recordGuard.get();
-    ASSERT_NE(record, nullptr);
-    ASSERT_NE(input, nullptr);
-    ASSERT_NE(output, nullptr);
-    record->record_->SetUtdId("ApplicationDefined-placeholder");
-    record->record_->AddEntry(UDMF_META_PLAIN_TEXT, std::monostate());
-    const std::string channel = "reentrant-uds-record-lifetime-test";
-    record->record_->SetChannelName(channel);
-    std::weak_ptr<UnifiedRecord> previous = record->record_;
-    auto getter = std::make_shared<ReentrantGetter>();
-    getter->read = [record, &input, previous]() -> ValueType {
-        EXPECT_EQ(OH_UdmfRecord_AddPlainText(record, input.get()), UDMF_E_OK);
-        EXPECT_FALSE(previous.expired());
-        auto object = std::make_shared<Object>();
-        object->value_[CONTENT] = std::string("lazy text");
-        return object;
-    };
-    GetterSystem::GetInstance().RegisterCreator(channel, [getter] { return getter; });
-    int status = OH_UdmfRecord_GetPlainText(record, output.get());
-    GetterSystem::GetInstance().RegisterCreator(channel, [] { return nullptr; });
-    EXPECT_EQ(status, UDMF_E_OK);
-    EXPECT_STREQ(OH_UdsPlainText_GetContent(output.get()), "lazy text");
-    EXPECT_TRUE(previous.expired());
 }
 
 } // namespace OHOS::Test

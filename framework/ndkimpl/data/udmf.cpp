@@ -309,9 +309,13 @@ int OH_UdmfData_GetPrimaryPlainText(OH_UdmfData* data, OH_UdsPlainText* plainTex
     if (!IsUnifiedDataValid(data) || IsInvalidUdsObjectPtr(plainText, UDS_PLAIN_TEXT_STRUCT_ID)) {
         return UDMF_E_INVALID_PARAM;
     }
-    unsigned int count = 0;
-    auto records = OH_UdmfData_GetRecords(data, &count);
-    return GetFirstPlainText(records, count, plainText);
+    std::lock_guard<std::mutex> lock(data->mutex);
+    if (data->records == nullptr) {
+        LOG_DEBUG(UDMF_CAPI, "no cache value");
+        std::vector<std::shared_ptr<UnifiedRecord>> records = data->unifiedData_->GetRecords();
+        CreateUnifiedDataRecordsArray(data, records);
+    }
+    return GetFirstPlainText(data->records, data->recordsCount, plainText);
 }
 
 int OH_UdmfData_GetPrimaryHtml(OH_UdmfData* data, OH_UdsHtml* html)
@@ -319,9 +323,13 @@ int OH_UdmfData_GetPrimaryHtml(OH_UdmfData* data, OH_UdsHtml* html)
     if (!IsUnifiedDataValid(data) || IsInvalidUdsObjectPtr(html, UDS_HTML_STRUCT_ID)) {
         return UDMF_E_INVALID_PARAM;
     }
-    unsigned int count = 0;
-    auto records = OH_UdmfData_GetRecords(data, &count);
-    return GetFirstHtml(records, count, html);
+    std::lock_guard<std::mutex> lock(data->mutex);
+    if (data->records == nullptr) {
+        LOG_DEBUG(UDMF_CAPI, "no cache value");
+        std::vector<std::shared_ptr<UnifiedRecord>> records = data->unifiedData_->GetRecords();
+        CreateUnifiedDataRecordsArray(data, records);
+    }
+    return GetFirstHtml(data->records, data->recordsCount, html);
 }
 
 int OH_UdmfData_GetRecordCount(OH_UdmfData *data)
