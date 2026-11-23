@@ -25,6 +25,7 @@ static constexpr size_t MAX_TYPE_COUNT = 1000;
 Status DataParamsConversion::GetInnerDataParams(OH_UdmfGetDataParams &ndkDataParams, QueryOption &query,
     GetDataParams &dataParams)
 {
+    std::lock_guard<std::mutex> lock(*ndkDataParams.acceptableInfo.mutex);
     if (ndkDataParams.dataProgressListener == nullptr || query.key.size() == 0 ||
         ndkDataParams.acceptableInfo.typesCount > MAX_TYPE_COUNT) {
         return Status::E_INVALID_PARAMETERS;
@@ -62,6 +63,7 @@ Status DataParamsConversion::GetInnerDataParams(OH_UdmfGetDataParams &ndkDataPar
 Status DataParamsConversion::GetDataLoaderParams(const OH_UdmfDataLoadParams &ndkDataParams,
     DataLoadParams &dataLoadParams)
 {
+    std::lock_guard<std::mutex> lock(*ndkDataParams.dataLoadInfo.mutex);
     if (ndkDataParams.dataLoadHandler == nullptr || ndkDataParams.dataLoadInfo.typesCount > MAX_TYPE_COUNT) {
         LOG_ERROR(UDMF_CAPI, "DataLoadHandler is null or typesCount is too large");
         return Status::E_INVALID_PARAMETERS;

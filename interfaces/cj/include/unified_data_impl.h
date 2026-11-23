@@ -17,6 +17,7 @@
 #define UDMF_UNIFIED_DATA_IMPL_H
 
 #include <memory>
+#include <mutex>
 
 #include "cj_common_ffi.h"
 #include "unified_data.h"
@@ -60,6 +61,7 @@ public:
     std::shared_ptr<UDMF::UnifiedData> unifiedData_;
             
 private:
+    std::mutex mutex_;
     std::vector<sptr<UDMF::CUnifiedRecord>> records_;
 };
 } // namespace UDMF

@@ -211,6 +211,7 @@ Status UdmfAsyncClient::InvokeHapTask(const std::string &businessUdKey)
 {
     LOG_INFO(UDMF_CLIENT, "InvokeHap start!");
     std::shared_ptr<AsyncHelper> asyncHelper;
+    std::string processKey;
     {
         std::lock_guard<std::mutex> lockMap(mutex_);
         auto item = asyncHelperMap_.find(businessUdKey);
@@ -219,6 +220,7 @@ Status UdmfAsyncClient::InvokeHapTask(const std::string &businessUdKey)
             return E_ERROR;
         }
         asyncHelper = item->second;
+        processKey = asyncHelper != nullptr ? asyncHelper->processKey : std::string();
     }
     if (asyncHelper == nullptr) {
         LOG_ERROR(UDMF_CLIENT, "asyncHelper is nullptr");
@@ -229,7 +231,7 @@ Status UdmfAsyncClient::InvokeHapTask(const std::string &businessUdKey)
         Clear(businessUdKey);
         return E_OK;
     }
-    if (asyncHelper->processKey.empty()) {
+    if (processKey.empty()) {
         LOG_ERROR(UDMF_CLIENT, "Get key failed, not invoke hap.");
         Clear(businessUdKey);
         return E_ERROR;
@@ -247,7 +249,7 @@ Status UdmfAsyncClient::InvokeHapTask(const std::string &businessUdKey)
         return E_ERROR;
     }
 
-    auto status = obsMgrClient->NotifyProcessObserver(asyncHelper->processKey, callback);
+    auto status = obsMgrClient->NotifyProcessObserver(processKey, callback);
     if (status != AAFwk::SUCCESS) {
         LOG_ERROR(UDMF_CLIENT, "Notify process dialog failed, status=%{public}d", status);
         Clear(businessUdKey);

@@ -15,6 +15,7 @@
 #define LOG_TAG "VirtualEntryNapi"
 #include "virtual_entry_napi.h"
 
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -24,6 +25,27 @@
 #include "virtual_entry_attachment_registry.h"
 
 namespace OHOS::UDMF {
+namespace {
+constexpr size_t MAX_VIRTUAL_ENTRY_STRING_BYTES = 1024;
+} // namespace
+
+bool ParseVirtualEntryString(napi_env env, napi_value value, std::string &text)
+{
+    size_t length = 0;
+    if (napi_get_value_string_utf8(env, value, nullptr, 0, &length) != napi_ok ||
+        length > MAX_VIRTUAL_ENTRY_STRING_BYTES) {
+        return false;
+    }
+    std::array<char, MAX_VIRTUAL_ENTRY_STRING_BYTES + 1> buffer{};
+    size_t copied = 0;
+    if (napi_get_value_string_utf8(env, value, buffer.data(), length + 1, &copied) != napi_ok || copied > length) {
+        return false;
+    }
+    // Preserve embedded NUL bytes so virtual-entry validation sees the complete input.
+    text.assign(buffer.data(), copied);
+    return true;
+}
+
 bool ParseVirtualFileSize(napi_env env, napi_value value, int64_t &size)
 {
     double number = 0;

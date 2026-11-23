@@ -54,6 +54,24 @@ function expectInvalidName(name: string): void {
 export default function StageUdmfVirtualEntryBoundaryTest(): void {
   describe('StageUdmfVirtualEntryBoundaryTest', function () {
     /**
+     * @tc.name ExistingQueryKeyTerminatorCompatibility
+     * @tc.desc Preserve the existing query key conversion when a native buffer includes its terminator.
+     * @tc.type FUNC
+     */
+    it('ExistingQueryKeyTerminatorCompatibility', 0, async function () {
+      const text = new UDC.PlainText();
+      text.textContent = 'key conversion compatibility';
+      const data = new UDC.UnifiedData(text);
+      const key = await UDC.insertData({ intention: UDC.Intention.DATA_HUB }, data);
+      try {
+        const records = await UDC.queryData({ key: key + '\u0000unused buffer tail' });
+        expect(records.length).assertEqual(1);
+      } finally {
+        await UDC.deleteData({ key: key });
+      }
+    });
+
+    /**
      * @tc.name VirtualEntryNameEmbeddedNul
      * @tc.desc Reject embedded NUL without truncation.
      * @tc.type FUNC
