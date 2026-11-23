@@ -288,6 +288,41 @@ HWTEST_F(UDMFTest, OH_Udmf_AddRecordToUnifiedData002, TestSize.Level0)
 }
 
 /**
+ * @tc.name: OH_Udmf_AddRecordInvalidatesTypesCache001
+ * @tc.desc: OH_UdmfData_AddRecord invalidates the cached typesArray so GetTypes rebuilds it
+ * @tc.type: FUNC
+ */
+HWTEST_F(UDMFTest, OH_Udmf_AddRecordInvalidatesTypesCache001, TestSize.Level0)
+{
+    OH_UdmfData *unifiedData = OH_UdmfData_Create();
+    OH_UdmfRecord *record = OH_UdmfRecord_Create();
+    OH_UdsPlainText *plainText = OH_UdsPlainText_Create();
+    OH_UdmfRecord_AddPlainText(record, plainText);
+    EXPECT_EQ(OH_UdmfData_AddRecord(unifiedData, record), UDMF_E_OK);
+
+    unsigned int count = 0;
+    char **types = OH_UdmfData_GetTypes(unifiedData, &count);
+    EXPECT_NE(types, nullptr);
+    EXPECT_EQ(count, 1U);
+
+    OH_UdmfRecord *record2 = OH_UdmfRecord_Create();
+    OH_UdsHyperlink *hyperlink = OH_UdsHyperlink_Create();
+    OH_UdmfRecord_AddHyperlink(record2, hyperlink);
+    EXPECT_EQ(OH_UdmfData_AddRecord(unifiedData, record2), UDMF_E_OK);
+
+    unsigned int count2 = 0;
+    char **types2 = OH_UdmfData_GetTypes(unifiedData, &count2);
+    EXPECT_NE(types2, nullptr);
+    EXPECT_EQ(count2, 2U);
+
+    OH_UdsPlainText_Destroy(plainText);
+    OH_UdsHyperlink_Destroy(hyperlink);
+    OH_UdmfRecord_Destroy(record);
+    OH_UdmfRecord_Destroy(record2);
+    OH_UdmfData_Destroy(unifiedData);
+}
+
+/**
  * @tc.name: OH_Udmf_HasUnifiedDataType001
  * @tc.desc: OH_UdmfData_HasType with return UDMF_E_INVALID_PARAM
  * @tc.type: FUNC

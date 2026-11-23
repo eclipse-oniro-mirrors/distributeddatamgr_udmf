@@ -54,9 +54,9 @@ Status GenerateNapiError(Status error, int32_t &errCode, std::string &errMessage
         errCode = napiError.jsCode;
         errMessage = napiError.message;
     } else {
-        // unmatched status return unified error code
+        // unmatched status: keep a generic message so failures stay diagnosable
         errCode = -1;
-        errMessage = "";
+        errMessage = "Internal error.";
     }
     LOG_DEBUG(UDMF_KITS_NAPI, "GenerateNapiError errCode is %{public}d", errCode);
     if (errCode == 0) {
@@ -81,7 +81,7 @@ void ThrowNapiError(napi_env env, int32_t status, const std::string &errMessage,
         napiError = errorMsg.value();
     } else {
         napiError.jsCode = -1;
-        napiError.message = "";
+        napiError.message = "Internal error.";
     }
 
     std::string message(napiError.message);

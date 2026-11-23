@@ -35,6 +35,10 @@ UtdGraph &UtdGraph::GetInstance()
 bool UtdGraph::IsValidType(const std::string &node)
 {
     std::unique_lock<std::mutex> lock(graphMutex_);
+    if (graph_ == nullptr) {
+        LOG_ERROR(UDMF_CLIENT, "graph_ is nullptr.");
+        return false;
+    }
     return graph_->IsValidType(node);
 }
 

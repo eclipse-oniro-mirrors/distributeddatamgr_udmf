@@ -52,7 +52,10 @@ int64_t UnifiedData::GetSize()
 
 std::string UnifiedData::GetGroupId() const
 {
-    return this->runtime_->key.groupId;
+    if (runtime_ == nullptr) {
+        return "";
+    }
+    return runtime_->key.groupId;
 }
 
 std::shared_ptr<Runtime> UnifiedData::GetRuntime() const

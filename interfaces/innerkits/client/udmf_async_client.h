@@ -40,8 +40,12 @@ private:
 
     Status RegisterAsyncHelper(const GetDataParams &params);
     Status CheckSync(std::shared_ptr<AsyncHelper> asyncHelper, const QueryOption &query);
+    static std::shared_ptr<AsyncHelper> GetValidAsyncHelper(
+        const std::string &key, const std::weak_ptr<AsyncHelper> &expected);
     static void HandleDelayDataError(
         const std::string &key, const std::weak_ptr<AsyncHelper> &expected, int32_t status);
+    static void HandleDelayData(
+        const std::string &key, const std::weak_ptr<AsyncHelper> &expected, const UnifiedData &unifiedData);
     Status GetDataFromDB(std::shared_ptr<AsyncHelper> asyncHelper, const QueryOption &query);
     Status GetDataFromCache(std::shared_ptr<AsyncHelper> asyncHelper, const QueryOption &query);
     Status SetProgressData(const std::string &businessUdKey);
