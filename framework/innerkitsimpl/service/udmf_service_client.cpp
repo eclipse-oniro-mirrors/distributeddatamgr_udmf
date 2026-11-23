@@ -70,7 +70,6 @@ sptr<DistributedKv::IKvStoreDataService> UdmfServiceClient::GetDistributedKvData
         return nullptr;
     }
 
-    
     auto remote = samgr->CheckSystemAbility(DISTRIBUTED_KV_DATA_SERVICE_ABILITY_ID);
     kvDataServiceProxy_ = iface_cast<DistributedKv::IKvStoreDataService>(remote);
     if (kvDataServiceProxy_ == nullptr) {
