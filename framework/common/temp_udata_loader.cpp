@@ -74,16 +74,14 @@ bool TempUDataLoader::Decode(const UnifiedData &packed, UnifiedData &decoded, in
     AppFileService::ModuleFileUri::FileUri fileUri(uri);
     std::string path;
     if (userId > 0) {
-        if (fileUri.IsRemoteUri()) {
-            path = fileUri.GetRealPathBySA();
-        } else {
-            int32_t ret = AppFileService::SandboxHelper::GetPhysicalPath(uri, std::to_string(userId), path);
-            if (ret != 0) {
-                LOG_ERROR(UDMF_FRAMEWORK, "failed to get physical path, error:%{public}d", ret);
-                return false;
-            }
+        // UserId is used by server-side audit events to resolve the audited user's
+        int32_t ret = AppFileService::SandboxHelper::GetPhysicalPath(uri, std::to_string(userId), path);
+        if (ret != 0) {
+            LOG_ERROR(UDMF_FRAMEWORK, "failed to get physical path, error:%{public}d", ret);
+            return false;
         }
     } else {
+        // Without a userId, resolve the path in the current context (legacy behavior).
         path = fileUri.GetRealPath();
     }
     std::FILE *file = fopen(path.c_str(), "r");
