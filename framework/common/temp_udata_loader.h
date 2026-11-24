@@ -16,6 +16,7 @@
 #ifndef UDMF_TEMP_UDATA_LOADER_H
 #define UDMF_TEMP_UDATA_LOADER_H
 
+#include <cstdint>
 #include <cstdio>
 
 #include "unified_data.h"
@@ -30,7 +31,7 @@ public:
 
     static bool FileClose(std::FILE *file, bool status);
     static bool IsTempUData(const UnifiedData &data);
-    static bool Decode(const UnifiedData &packed, UnifiedData &decoded);
+    static bool Decode(const UnifiedData &packed, UnifiedData &decoded, int32_t userId = 0);
 };
 
 } // namespace UDMF

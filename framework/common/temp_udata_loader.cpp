@@ -23,6 +23,7 @@
 
 #include "file_uri.h"
 #include "logger.h"
+#include "sandbox_helper.h"
 #include "tlv_util.h"
 #include "unified_data_extension.h"
 
@@ -58,7 +59,7 @@ bool TempUDataLoader::IsTempUData(const UnifiedData &data)
     return true;
 }
 
-bool TempUDataLoader::Decode(const UnifiedData &packed, UnifiedData &decoded)
+bool TempUDataLoader::Decode(const UnifiedData &packed, UnifiedData &decoded, int32_t userId)
 {
     auto records = packed.GetRecords();
     if (records.size() != 1 || records[0] == nullptr) {
@@ -71,7 +72,18 @@ bool TempUDataLoader::Decode(const UnifiedData &packed, UnifiedData &decoded)
         return false;
     }
     AppFileService::ModuleFileUri::FileUri fileUri(uri);
-    std::string path = fileUri.GetRealPath();
+    std::string path;
+    if (userId > 0) {
+        // UserId is used by server-side audit events to resolve the audited user's
+        int32_t ret = AppFileService::SandboxHelper::GetPhysicalPath(uri, std::to_string(userId), path);
+        if (ret != 0) {
+            LOG_ERROR(UDMF_FRAMEWORK, "failed to get physical path, error:%{public}d", ret);
+            return false;
+        }
+    } else {
+        // Without a userId, resolve the path in the current context (legacy behavior).
+        path = fileUri.GetRealPath();
+    }
     std::FILE *file = fopen(path.c_str(), "r");
     if (file == nullptr) {
         LOG_ERROR(UDMF_FRAMEWORK, "failed to open file, error:%{public}s", std::strerror(errno));
