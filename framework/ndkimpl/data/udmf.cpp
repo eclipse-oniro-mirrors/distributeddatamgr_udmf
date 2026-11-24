@@ -772,7 +772,10 @@ static int ReadGeneralEntry(const std::shared_ptr<UnifiedRecord>& nativeRecord, 
         LOG_ERROR(UDMF_CAPI, "object is nullptr!");
         return UDMF_ERR;
     }
-    object->GetValue(ARRAY_BUFFER, bytes);
+    if (!object->GetValue(ARRAY_BUFFER, bytes) || bytes.empty()) {
+        LOG_ERROR(UDMF_CAPI, "Array buffer data is missing or empty.");
+        return UDMF_ERR;
+    }
     if (bytes.size() > MAX_GENERAL_ENTRY_SIZE) {
         LOG_INFO(UDMF_CAPI, "data size exceeds maximum size");
         return UDMF_ERR;

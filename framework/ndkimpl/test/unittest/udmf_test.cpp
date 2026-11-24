@@ -5257,7 +5257,19 @@ HWTEST_F(UDMFTest, GeneralEntry_ArrayBufferPreservesSharedCache, TestSize.Level1
     EXPECT_EQ(record->lastType, type);
 }
 
-HWTEST_F(UDMFTest, GeneralEntry_MissingBytesPreservesEmptyResult, TestSize.Level1)
+HWTEST_F(UDMFTest, GeneralEntry_EmptyRecordReturnsError, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    char typeId[] = "";
+    unsigned char* bytes = nullptr;
+    unsigned int count = 0;
+    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, typeId, &bytes, &count), UDMF_ERR);
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_MissingBytesReturnsError, TestSize.Level1)
 {
     std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
         OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
@@ -5269,8 +5281,22 @@ HWTEST_F(UDMFTest, GeneralEntry_MissingBytesPreservesEmptyResult, TestSize.Level
     record->record_->AddEntry(type, object);
     unsigned char* bytes = nullptr;
     unsigned int count = 1;
-    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_E_OK);
-    EXPECT_EQ(count, 0u);
+    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_ERR);
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_EmptyArrayBufferReturnsError, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    const char* type = "ApplicationDefined-empty-buffer";
+    auto object = std::make_shared<Object>();
+    object->value_[ARRAY_BUFFER] = std::vector<uint8_t>();
+    record->record_->AddEntry(type, object);
+    unsigned char* bytes = nullptr;
+    unsigned int count = 0;
+    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_ERR);
 }
 
 HWTEST_F(UDMFTest, GeneralEntry_ConcurrentSameTypeSharesCache, TestSize.Level1)
