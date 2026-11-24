@@ -21,6 +21,8 @@
 #include "nativetoken_kit.h"
 #include <unistd.h>
 #include <memory>
+#include <atomic>
+#include <thread>
 #include "udmf.h"
 #include "uds.h"
 #include "udmf_err_code.h"
@@ -2003,16 +2005,19 @@ HWTEST_F(UDMFTest, OH_UdmfProgressInfo_GetStatus001, TestSize.Level0)
 HWTEST_F(UDMFTest, OH_UdmfGetDataParams_SetDestUri001, TestSize.Level0)
 {
     OH_UdmfGetDataParams *params1 = OH_UdmfGetDataParams_Create();
+    ASSERT_NE(params1, nullptr);
     const char *destUri1 = nullptr;
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params1, destUri1));
+    OH_UdmfGetDataParams_SetDestUri(params1, destUri1);
+    EXPECT_TRUE(params1->destUri.empty());
 
     OH_UdmfGetDataParams *params2 = nullptr;
     const char *destUri2 = TEST_DATA;
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params2, destUri2));
+    OH_UdmfGetDataParams_SetDestUri(params2, destUri2);
 
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params1, destUri2));
+    OH_UdmfGetDataParams_SetDestUri(params1, destUri2);
+    EXPECT_EQ(params1->destUri, destUri2);
 
-    EXPECT_NO_FATAL_FAILURE(OH_UdmfGetDataParams_SetDestUri(params2, destUri1));
+    OH_UdmfGetDataParams_SetDestUri(params2, destUri1);
 
     OH_UdmfGetDataParams_Destroy(params1);
 }
@@ -5025,4 +5030,343 @@ HWTEST_F(UDMFTest, OH_UdmfRecord_AddVirtualFileUri_001, TestSize.Level1)
     OH_UDMF_DestroyVirtualFileInfo(info);
     OH_UDMF_DestroyVirtualItem(item);
 }
+
+HWTEST_F(UDMFTest, Bug4_GeneralEntryOverwriteKeepsCacheLength, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    const char* type = "ApplicationDefined-testType";
+    const unsigned char initial[] = "short";
+    const unsigned char replacement[] = "replacement data with a different length";
+    ASSERT_EQ(OH_UdmfRecord_AddGeneralEntry(record, type, initial, sizeof(initial)), UDMF_E_OK);
+    unsigned char* bytes = nullptr;
+    unsigned int count = 0;
+    ASSERT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_E_OK);
+    ASSERT_EQ(OH_UdmfRecord_AddGeneralEntry(record, type, replacement, sizeof(replacement)), UDMF_E_OK);
+    ASSERT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_E_OK);
+    EXPECT_EQ(count, sizeof(replacement));
+    EXPECT_EQ(bytes[0], replacement[0]);
+}
+
+HWTEST_F(UDMFTest, Bug1_ConcurrentSetTypeAndGetTypes, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfDataLoadInfo, decltype(&OH_UdmfDataLoadInfo_Destroy)> infoGuard(
+        OH_UdmfDataLoadInfo_Create(), OH_UdmfDataLoadInfo_Destroy);
+    auto info = infoGuard.get();
+    ASSERT_NE(info, nullptr);
+    OH_UdmfDataLoadInfo_SetType(info, "initial");
+    std::thread writer([info] {
+        for (int i = 0; i < 100; ++i) {
+            OH_UdmfDataLoadInfo_SetType(info, ("type" + std::to_string(i)).c_str());
+        }
+    });
+    bool valid = true;
+    for (int i = 0; i < 200; ++i) {
+        unsigned int count = 0;
+        auto types = OH_UdmfDataLoadInfo_GetTypes(info, &count);
+        // The returned array is borrowed; SetType may invalidate it after GetTypes returns.
+        valid &= types != nullptr && count > 0 && count <= 101;
+    }
+    writer.join();
+    EXPECT_TRUE(valid);
+    unsigned int count = 0;
+    auto current = OH_UdmfDataLoadInfo_GetTypes(info, &count);
+    ASSERT_NE(current, nullptr);
+    EXPECT_EQ(count, 101u);
+    EXPECT_STREQ(current[0], "initial");
+}
+
+HWTEST_F(UDMFTest, Bug3_ConcurrentAddRecordAndGetRecords, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> dataGuard(
+        OH_UdmfData_Create(), OH_UdmfData_Destroy);
+    auto data = dataGuard.get();
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(data, nullptr);
+    ASSERT_NE(record, nullptr);
+    std::atomic<bool> valid {true};
+    std::thread writer([data, record, &valid] {
+        for (int i = 0; i < 200; ++i) {
+            if (OH_UdmfData_AddRecord(data, record) != UDMF_E_OK) {
+                valid = false;
+            }
+        }
+    });
+    std::thread reader([data, &valid] {
+        for (int i = 0; i < 200; ++i) {
+            unsigned int count = 0;
+            auto records = OH_UdmfData_GetRecords(data, &count);
+            if ((count > 0 && records == nullptr) || count > 200) {
+                valid = false;
+            }
+        }
+    });
+    writer.join();
+    reader.join();
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(data->unifiedData_->GetRecords().size(), 200u);
+}
+
+HWTEST_F(UDMFTest, Bug4_ConcurrentGeneralEntryAndArrayBuffer, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    std::unique_ptr<OH_UdsArrayBuffer, decltype(&OH_UdsArrayBuffer_Destroy)> bufferGuard(
+        OH_UdsArrayBuffer_Create(), OH_UdsArrayBuffer_Destroy);
+    auto buffer = bufferGuard.get();
+    ASSERT_NE(record, nullptr);
+    ASSERT_NE(buffer, nullptr);
+    const char* type = "ApplicationDefined-race";
+    const unsigned char first[] = "short";
+    const unsigned char second[] = "second entry with a different length";
+    ASSERT_EQ(OH_UdmfRecord_AddGeneralEntry(record, type, first, sizeof(first)), UDMF_E_OK);
+    std::atomic<bool> valid {true};
+    std::thread writer([record, type, &first, &second, &valid] {
+        for (int i = 0; i < 200; ++i) {
+            if (OH_UdmfRecord_AddGeneralEntry(record, type, second, sizeof(second)) != UDMF_E_OK ||
+                OH_UdmfRecord_AddGeneralEntry(record, type, first, sizeof(first)) != UDMF_E_OK) {
+                valid = false;
+            }
+        }
+    });
+    for (int i = 0; i < 200; ++i) {
+        if (OH_UdmfRecord_GetArrayBuffer(record, type, buffer) != UDMF_E_OK) {
+            valid = false;
+            continue;
+        }
+        unsigned char* bytes = nullptr;
+        unsigned int count = 0;
+        if (OH_UdsArrayBuffer_GetData(buffer, &bytes, &count) != UDMF_E_OK ||
+            !((count == sizeof(first) && memcmp(bytes, first, count) == 0) ||
+              (count == sizeof(second) && memcmp(bytes, second, count) == 0))) {
+            valid = false;
+        }
+        // A concurrent write may invalidate the borrowed pointer after this call returns.
+        if (OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count) != UDMF_E_OK ||
+            bytes == nullptr || (count != sizeof(first) && count != sizeof(second))) {
+            valid = false;
+        }
+    }
+    writer.join();
+    EXPECT_TRUE(valid);
+    unsigned char* bytes = nullptr;
+    unsigned int count = 0;
+    ASSERT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_E_OK);
+    ASSERT_EQ(count, sizeof(first));
+    EXPECT_EQ(memcmp(bytes, first, count), 0);
+}
+
+HWTEST_F(UDMFTest, Bug5_ConcurrentPropertyReadAndWrite, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfData, decltype(&OH_UdmfData_Destroy)> dataGuard(
+        OH_UdmfData_Create(), OH_UdmfData_Destroy);
+    auto data = dataGuard.get();
+    std::unique_ptr<OH_UdmfProperty, decltype(&OH_UdmfProperty_Destroy)> propertyGuard(
+        OH_UdmfProperty_Create(data), OH_UdmfProperty_Destroy);
+    auto property = propertyGuard.get();
+    ASSERT_NE(property, nullptr);
+    const std::string first(128, 'a');
+    const std::string second(256, 'b');
+    ASSERT_EQ(OH_UdmfProperty_SetTag(property, first.c_str()), UDMF_E_OK);
+    std::thread writer([property, &first, &second] {
+        for (int i = 0; i < 200; ++i) {
+            OH_UdmfProperty_SetTag(property, i % 2 == 0 ? first.c_str() : second.c_str());
+            OH_UdmfProperty_SetShareOption(property, i % 2 == 0 ? SHARE_OPTIONS_IN_APP : SHARE_OPTIONS_CROSS_APP);
+        }
+    });
+    bool valid = true;
+    for (int i = 0; i < 200; ++i) {
+        auto tag = OH_UdmfProperty_GetTag(property);
+        auto option = OH_UdmfProperty_GetShareOption(property);
+        valid &= tag != nullptr && (option == SHARE_OPTIONS_IN_APP || option == SHARE_OPTIONS_CROSS_APP);
+    }
+    writer.join();
+    EXPECT_TRUE(valid);
+    std::string tag(OH_UdmfProperty_GetTag(property));
+    EXPECT_TRUE(tag == first || tag == second);
+}
+
+HWTEST_F(UDMFTest, Bug6_ConcurrentDetailsReadAndWrite, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdsDetails, decltype(&OH_UdsDetails_Destroy)> detailsGuard(
+        OH_UdsDetails_Create(), OH_UdsDetails_Destroy);
+    auto details = detailsGuard.get();
+    ASSERT_NE(details, nullptr);
+    const std::string first(128, 'a');
+    const std::string second(256, 'b');
+    ASSERT_EQ(OH_UdsDetails_SetValue(details, "key", first.c_str()), UDMF_E_OK);
+    std::thread writer([details, &first, &second] {
+        for (int i = 0; i < 200; ++i) {
+            OH_UdsDetails_SetValue(details, "key", i % 2 == 0 ? first.c_str() : second.c_str());
+            OH_UdsDetails_SetValue(details, "other", "value");
+            OH_UdsDetails_Remove(details, "other");
+        }
+    });
+    bool valid = true;
+    for (int i = 0; i < 200; ++i) {
+        valid &= OH_UdsDetails_HasKey(details, "key");
+        valid &= OH_UdsDetails_GetValue(details, "key") != nullptr;
+    }
+    writer.join();
+    EXPECT_TRUE(valid);
+    std::string value(OH_UdsDetails_GetValue(details, "key"));
+    EXPECT_TRUE(value == first || value == second);
+}
+
+HWTEST_F(UDMFTest, Bug8_SetFileUriConcurrentWithValueReplacement, TestSize.Level1)
+{
+    File record;
+    std::thread writer([&record] {
+        for (int i = 0; i < 500; ++i) {
+            record.SetValue(std::string("file:///old"));
+            record.SetValue(std::make_shared<Object>());
+        }
+    });
+    for (int i = 0; i < 500; ++i) {
+        record.SetFileUri("file:///updated");
+    }
+    writer.join();
+    record.SetFileUri("file:///final");
+    auto value = record.GetOriginValue();
+    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<Object>>(value));
+    std::string uri;
+    ASSERT_TRUE(std::get<std::shared_ptr<Object>>(value)->GetValue(ORI_URI, uri));
+    EXPECT_EQ(uri, "file:///final");
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_ArrayBufferPreservesSharedCache, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    std::unique_ptr<OH_UdsArrayBuffer, decltype(&OH_UdsArrayBuffer_Destroy)> bufferGuard(
+        OH_UdsArrayBuffer_Create(), OH_UdsArrayBuffer_Destroy);
+    auto buffer = bufferGuard.get();
+    ASSERT_NE(record, nullptr);
+    ASSERT_NE(buffer, nullptr);
+    const char* type = "ApplicationDefined-shared-cache";
+    const unsigned char value[] = "data";
+    ASSERT_EQ(OH_UdmfRecord_AddGeneralEntry(record, type, value, sizeof(value)), UDMF_E_OK);
+    ASSERT_EQ(OH_UdmfRecord_GetArrayBuffer(record, type, buffer), UDMF_E_OK);
+    EXPECT_NE(record->recordData, nullptr);
+    EXPECT_EQ(record->lastType, type);
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_EmptyRecordReturnsError, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    char typeId[] = "";
+    unsigned char* bytes = nullptr;
+    unsigned int count = 0;
+    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, typeId, &bytes, &count), UDMF_ERR);
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_MissingBytesReturnsError, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    const char* type = "ApplicationDefined-empty";
+    auto object = std::make_shared<Object>();
+    object->value_[UNIFORM_DATA_TYPE] = type;
+    record->record_->AddEntry(type, object);
+    unsigned char* bytes = nullptr;
+    unsigned int count = 1;
+    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_ERR);
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_EmptyArrayBufferReturnsError, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    const char* type = "ApplicationDefined-empty-buffer";
+    auto object = std::make_shared<Object>();
+    object->value_[ARRAY_BUFFER] = std::vector<uint8_t>();
+    record->record_->AddEntry(type, object);
+    unsigned char* bytes = nullptr;
+    unsigned int count = 0;
+    EXPECT_EQ(OH_UdmfRecord_GetGeneralEntry(record, type, &bytes, &count), UDMF_ERR);
+}
+
+HWTEST_F(UDMFTest, GeneralEntry_ConcurrentSameTypeSharesCache, TestSize.Level1)
+{
+    std::unique_ptr<OH_UdmfRecord, decltype(&OH_UdmfRecord_Destroy)> recordGuard(
+        OH_UdmfRecord_Create(), OH_UdmfRecord_Destroy);
+    auto record = recordGuard.get();
+    ASSERT_NE(record, nullptr);
+    const char* type = "ApplicationDefined-concurrent-cache";
+    std::vector<unsigned char> value(4 * 1024 * 1024, 'v');
+    ASSERT_EQ(OH_UdmfRecord_AddGeneralEntry(record, type, value.data(), value.size()), UDMF_E_OK);
+    std::atomic<int> ready {0};
+    unsigned char* entries[2] {nullptr, nullptr};
+    unsigned int counts[2] {0, 0};
+    int status[2] {UDMF_ERR, UDMF_ERR};
+    auto read = [record, type, &ready, &entries, &counts, &status](int index) {
+        ++ready;
+        while (ready.load() < 2) {
+            std::this_thread::yield();
+        }
+        status[index] = OH_UdmfRecord_GetGeneralEntry(record, type, &entries[index], &counts[index]);
+    };
+    std::thread first(read, 0);
+    std::thread second(read, 1);
+    first.join();
+    second.join();
+    EXPECT_EQ(status[0], UDMF_E_OK);
+    EXPECT_EQ(status[1], UDMF_E_OK);
+    EXPECT_EQ(entries[0], entries[1]);
+    EXPECT_EQ(counts[0], value.size());
+    EXPECT_EQ(counts[1], value.size());
+}
+
+HWTEST_F(UDMFTest, Record_ConcurrentFirstUdsEntriesAreBothRetained, TestSize.Level1)
+{
+    auto plainText = OH_UdsPlainText_Create();
+    auto html = OH_UdsHtml_Create();
+    ASSERT_NE(plainText, nullptr);
+    ASSERT_NE(html, nullptr);
+    ASSERT_EQ(OH_UdsPlainText_SetContent(plainText, "text"), UDMF_E_OK);
+    ASSERT_EQ(OH_UdsHtml_SetContent(html, "<p>text</p>"), UDMF_E_OK);
+    unsigned int lostEntries = 0;
+    for (unsigned int round = 0; round < 500; ++round) {
+        auto record = OH_UdmfRecord_Create();
+        ASSERT_NE(record, nullptr);
+        std::atomic<unsigned int> ready {0};
+        auto waitForPeer = [&ready] {
+            ready.fetch_add(1);
+            while (ready.load() != 2) {
+                std::this_thread::yield();
+            }
+        };
+        std::thread textWriter([&waitForPeer, record, plainText] {
+            waitForPeer();
+            EXPECT_EQ(OH_UdmfRecord_AddPlainText(record, plainText), UDMF_E_OK);
+        });
+        std::thread htmlWriter([&waitForPeer, record, html] {
+            waitForPeer();
+            EXPECT_EQ(OH_UdmfRecord_AddHtml(record, html), UDMF_E_OK);
+        });
+        textWriter.join();
+        htmlWriter.join();
+        unsigned int count = 0;
+        OH_UdmfRecord_GetTypes(record, &count);
+        lostEntries += count != 2;
+        OH_UdmfRecord_Destroy(record);
+    }
+    OH_UdsPlainText_Destroy(plainText);
+    OH_UdsHtml_Destroy(html);
+    EXPECT_EQ(lostEntries, 0u);
+}
+
 } // namespace OHOS::Test

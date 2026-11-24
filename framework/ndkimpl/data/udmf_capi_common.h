@@ -34,7 +34,7 @@ struct NdkVirtualEntryInfo;
 struct UdsObject {
     const int64_t cid;
     std::shared_ptr<OHOS::UDMF::Object> obj;
-    std::mutex mutex;
+    mutable std::mutex mutex;
     explicit UdsObject(int cid);
     template<typename T> T* GetUdsValue(const char* paramName);
     template<typename T> int SetUdsValue(const char* paramName, const T &pramValue);
@@ -109,7 +109,7 @@ struct OH_UdmfRecord {
     char **typesArray {nullptr};
     unsigned int typesCount {0};
     std::string lastType;
-    std::mutex mutex;
+    std::recursive_mutex mutex;
 };
 
 struct OH_UdmfData {
@@ -145,6 +145,7 @@ struct OH_UdmfDataLoadInfo {
     char **typesArray {nullptr};
     unsigned int typesCount {0};
     unsigned int recordsCount {0};
+    std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 };
 
 struct OH_UdmfGetDataParams {
@@ -171,7 +172,7 @@ struct OH_UdsDetails {
     char **keysArray {nullptr};
     unsigned int keysCount {0};
     bool isUpdate {false};
-    std::mutex mutex;
+    mutable std::mutex mutex;
 };
 
 bool IsInvalidUdsObjectPtr(const UdsObject* pThis, int cid);

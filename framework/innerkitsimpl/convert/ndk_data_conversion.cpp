@@ -26,6 +26,7 @@ Status NdkDataConversion::GetNativeUnifiedData(OH_UdmfData* ndkData, std::shared
     if (ndkData == nullptr || data == nullptr || ndkData->cid != NdkStructId::UDMF_UNIFIED_DATA_STRUCT_ID) {
         return Status::E_INVALID_PARAMETERS;
     }
+    std::lock_guard<std::mutex> lock(ndkData->mutex);
     data = ndkData->unifiedData_;
     return Status::E_OK;
 }
@@ -35,6 +36,7 @@ Status NdkDataConversion::GetNdkUnifiedData(std::shared_ptr<UnifiedData> data, O
     if (data == nullptr || ndkData == nullptr || ndkData->cid != NdkStructId::UDMF_UNIFIED_DATA_STRUCT_ID) {
         return Status::E_INVALID_PARAMETERS;
     }
+    std::lock_guard<std::mutex> lock(ndkData->mutex);
     ndkData->unifiedData_ = data;
     return Status::E_OK;
 }

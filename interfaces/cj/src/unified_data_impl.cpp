@@ -75,6 +75,7 @@ void CUnifiedData::AddRecord(sptr<UDMF::CUnifiedRecord> record)
     if (record == nullptr) {
         return;
     }
+    std::lock_guard<std::mutex> lock(mutex_);
     this->records_.push_back(record);
     unifiedData_->AddRecord(record->GetUnifiedRecord());
 }
@@ -97,8 +98,13 @@ static CArrUnifiedRecord VectorToArray(std::vector<int64_t> vector)
 
 CArrUnifiedRecord CUnifiedData::GetRecords()
 {
+    std::vector<sptr<UDMF::CUnifiedRecord>> records;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        records = records_;
+    }
     std::vector<int64_t> recordIds;
-    for (auto record : this->records_) {
+    for (const auto& record : records) {
         if (record == nullptr) {
             break;
         }
@@ -109,6 +115,7 @@ CArrUnifiedRecord CUnifiedData::GetRecords()
 
 bool CUnifiedData::HasType(const char *type)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     return unifiedData_->HasType(type);
 }
 
@@ -130,7 +137,11 @@ static CArrString StringVectorToArray(std::vector<std::string> vector)
 
 CArrString CUnifiedData::GetTypes()
 {
-    std::vector<std::string> types = unifiedData_->GetTypesLabels();
+    std::vector<std::string> types;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        types = unifiedData_->GetTypesLabels();
+    }
     return StringVectorToArray(types);
 }
 } // namespace UDMF

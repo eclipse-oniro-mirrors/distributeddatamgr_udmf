@@ -416,9 +416,9 @@ bool UnifiedRecord::HasFileType(std::string &fileUri)
 
 void UnifiedRecord::SetFileUri(const std::string &fileUri)
 {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (std::holds_alternative<std::shared_ptr<Object>>(GetOriginValue())) {
         auto obj = std::get<std::shared_ptr<Object>>(GetOriginValue());
-        std::lock_guard<std::recursive_mutex> lock(mutex_);
         obj->value_[ORI_URI] = fileUri;
     } else if (std::find(std::begin(FILE_TYPES), std::end(FILE_TYPES), GetType()) != std::end(FILE_TYPES)) {
         InitObject();
@@ -427,7 +427,6 @@ void UnifiedRecord::SetFileUri(const std::string &fileUri)
             return;
         }
         auto obj = std::get<std::shared_ptr<Object>>(GetOriginValue());
-        std::lock_guard<std::recursive_mutex> lock(mutex_);
         obj->value_[ORI_URI] = fileUri;
     } else {
         LOG_ERROR(UDMF_FRAMEWORK, "Record has no uri.");

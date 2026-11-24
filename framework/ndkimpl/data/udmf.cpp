@@ -111,14 +111,20 @@ static OH_UdmfRecord** CreateUnifiedDataRecordsArray(OH_UdmfData* unifiedData,
 
 static bool IsUnifiedDataValid(OH_UdmfData* data)
 {
-    return data != nullptr && data->unifiedData_ != nullptr &&
-           data->cid == NdkStructId::UDMF_UNIFIED_DATA_STRUCT_ID;
+    if (data == nullptr || data->cid != NdkStructId::UDMF_UNIFIED_DATA_STRUCT_ID) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(data->mutex);
+    return data->unifiedData_ != nullptr;
 }
 
 static bool IsUnifiedRecordValid(OH_UdmfRecord* record)
 {
-    return record != nullptr && record->record_ != nullptr &&
-           record->cid == NdkStructId::UDMF_UNIFIED_RECORD_STRUCT_ID;
+    if (record == nullptr || record->cid != NdkStructId::UDMF_UNIFIED_RECORD_STRUCT_ID) {
+        return false;
+    }
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
+    return record->record_ != nullptr;
 }
 
 static bool IsUnifiedPropertiesValid(OH_UdmfProperty* properties)
@@ -175,7 +181,7 @@ int OH_UdmfData_AddRecord(OH_UdmfData* unifiedData, OH_UdmfRecord* record)
     if (!IsUnifiedDataValid(unifiedData) || !IsUnifiedRecordValid(record)) {
         return UDMF_E_INVALID_PARAM;
     }
-    std::lock_guard<std::mutex> lock(unifiedData->mutex);
+    std::scoped_lock lock(unifiedData->mutex, record->mutex);
     unifiedData->unifiedData_->AddRecord(record->record_);
     NdkDataConversion::DestroyStringArray(unifiedData->typesArray, unifiedData->typesCount);
     DestroyUnifiedRecordArray(unifiedData->records, unifiedData->recordsCount);
@@ -184,7 +190,15 @@ int OH_UdmfData_AddRecord(OH_UdmfData* unifiedData, OH_UdmfRecord* record)
 
 bool OH_UdmfData_HasType(OH_UdmfData* unifiedData, const char* type)
 {
-    return IsUnifiedDataValid(unifiedData) && type != nullptr && unifiedData->unifiedData_->HasTypeInEntries(type);
+    if (!IsUnifiedDataValid(unifiedData) || type == nullptr) {
+        return false;
+    }
+    UnifiedData nativeData;
+    {
+        std::lock_guard<std::mutex> lock(unifiedData->mutex);
+        nativeData = *unifiedData->unifiedData_;
+    }
+    return nativeData.HasTypeInEntries(type);
 }
 
 char** OH_UdmfData_GetTypes(OH_UdmfData* unifiedData, unsigned int* count)
@@ -192,16 +206,23 @@ char** OH_UdmfData_GetTypes(OH_UdmfData* unifiedData, unsigned int* count)
     if (!IsUnifiedDataValid(unifiedData) || count == nullptr) {
         return nullptr;
     }
-    std::lock_guard<std::mutex> lock(unifiedData->mutex);
-    if (unifiedData->typesArray != nullptr) {
-        LOG_DEBUG(UDMF_CAPI, "return cache value");
-        *count = unifiedData->typesCount;
-        return unifiedData->typesArray;
+    UnifiedData nativeData;
+    {
+        std::lock_guard<std::mutex> lock(unifiedData->mutex);
+        if (unifiedData->typesArray != nullptr) {
+            LOG_DEBUG(UDMF_CAPI, "return cache value");
+            *count = unifiedData->typesCount;
+            return unifiedData->typesArray;
+        }
+        nativeData = *unifiedData->unifiedData_;
     }
-    std::vector<std::string> typeLabels = unifiedData->unifiedData_->GetEntriesTypes();
+    std::vector<std::string> typeLabels = nativeData.GetEntriesTypes();
     AddFileUriTypeIfContains(typeLabels);
-    unifiedData->typesArray = NdkDataConversion::StrVectorToTypesArray(typeLabels);
-    unifiedData->typesArray == nullptr ? unifiedData->typesCount = 0 : unifiedData->typesCount = typeLabels.size();
+    std::lock_guard<std::mutex> lock(unifiedData->mutex);
+    if (unifiedData->typesArray == nullptr) {
+        unifiedData->typesArray = NdkDataConversion::StrVectorToTypesArray(typeLabels);
+        unifiedData->typesArray == nullptr ? unifiedData->typesCount = 0 : unifiedData->typesCount = typeLabels.size();
+    }
     *count = unifiedData->typesCount;
     return unifiedData->typesArray;
 }
@@ -211,7 +232,7 @@ char** OH_UdmfRecord_GetTypes(OH_UdmfRecord* record, unsigned int* count)
     if (!IsUnifiedRecordValid(record) || count == nullptr) {
         return nullptr;
     }
-    std::lock_guard<std::mutex> lock(record->mutex);
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
     if (record->typesArray != nullptr) {
         LOG_DEBUG(UDMF_CAPI, "return cache value");
         *count = record->typesCount;
@@ -250,6 +271,7 @@ static int GetFirstPlainText(OH_UdmfRecord **records, unsigned int recordCount, 
         return ret;
     }
     for (unsigned int i = 0; i < recordCount; i++) {
+        std::lock_guard<std::recursive_mutex> lock(records[i]->mutex);
         const char *type = OH_UdsPlainText_GetType(plainText);
         if (type == nullptr || !records[i]->record_->HasType(type)) {
             continue;
@@ -269,6 +291,7 @@ static int GetFirstHtml(OH_UdmfRecord **records, unsigned int recordCount, OH_Ud
         return ret;
     }
     for (unsigned int i = 0; i < recordCount; i++) {
+        std::lock_guard<std::recursive_mutex> lock(records[i]->mutex);
         const char *type = OH_UdsHtml_GetType(html);
         if (type == nullptr || !records[i]->record_->HasType(type)) {
             continue;
@@ -292,7 +315,6 @@ int OH_UdmfData_GetPrimaryPlainText(OH_UdmfData* data, OH_UdsPlainText* plainTex
         std::vector<std::shared_ptr<UnifiedRecord>> records = data->unifiedData_->GetRecords();
         CreateUnifiedDataRecordsArray(data, records);
     }
-
     return GetFirstPlainText(data->records, data->recordsCount, plainText);
 }
 
@@ -307,7 +329,6 @@ int OH_UdmfData_GetPrimaryHtml(OH_UdmfData* data, OH_UdsHtml* html)
         std::vector<std::shared_ptr<UnifiedRecord>> records = data->unifiedData_->GetRecords();
         CreateUnifiedDataRecordsArray(data, records);
     }
-
     return GetFirstHtml(data->records, data->recordsCount, html);
 }
 
@@ -344,10 +365,15 @@ OH_UdmfRecord* OH_UdmfData_GetRecord(OH_UdmfData* data, unsigned int index)
 
 bool OH_UdmfData_IsLocal(OH_UdmfData* data)
 {
-    if (!IsUnifiedDataValid(data) || data->unifiedData_->GetProperties() == nullptr) {
+    if (!IsUnifiedDataValid(data)) {
         return true;
     }
-    bool isRemote = data->unifiedData_->GetProperties()->isRemote;
+    std::lock_guard<std::mutex> lock(data->mutex);
+    auto properties = data->unifiedData_->GetProperties();
+    if (properties == nullptr) {
+        return true;
+    }
+    bool isRemote = properties->isRemote;
     return !isRemote;
 }
 
@@ -697,7 +723,7 @@ void OH_UdmfRecord_Destroy(OH_UdmfRecord* record)
         return;
     }
     {
-        std::lock_guard<std::mutex> lock(record->mutex);
+        std::lock_guard<std::recursive_mutex> lock(record->mutex);
         if (record->recordData != nullptr) {
             delete[] record->recordData;
             record->recordData = nullptr;
@@ -719,94 +745,123 @@ int OH_UdmfRecord_AddGeneralEntry(OH_UdmfRecord* record, const char* typeId,
     obj->value_[UNIFORM_DATA_TYPE] = typeId;
     obj->value_[ARRAY_BUFFER] = std::move(recordValue);
     obj->value_[ARRAY_BUFFER_LENGTH] = static_cast<int>(recordValue.size());
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
     if (record->record_->GetType() == UD_BUTT) {
         record->record_ = std::make_shared<ApplicationDefinedRecord>(APPLICATION_DEFINED_RECORD, obj);
         record->record_->SetUtdId(typeId);
     } else {
         record->record_->AddEntry(typeId, obj);
     }
-    record->recordDataLen = count;
+    delete[] record->recordData;
+    record->recordData = nullptr;
+    record->recordDataLen = 0;
+    record->lastType.clear();
     return UDMF_E_OK;
 }
 
-static int GetValueFromUint8Array(OH_UdmfRecord *record, const char *typeId, ValueType value)
+static int ReadGeneralEntry(const std::shared_ptr<UnifiedRecord>& nativeRecord, const char* typeId,
+    std::vector<uint8_t>& bytes)
 {
+    auto value = nativeRecord->GetEntry(typeId);
     if (!std::holds_alternative<std::shared_ptr<Object>>(value)) {
-        LOG_ERROR(UDMF_CAPI, "valueType is not object sptr!");
+        LOG_ERROR(UDMF_CAPI, "Not contains right data type.");
         return UDMF_ERR;
     }
-    auto obj = std::get<std::shared_ptr<Object>>(value);
-    if (obj == nullptr) {
+    auto object = std::get<std::shared_ptr<Object>>(value);
+    if (object == nullptr) {
         LOG_ERROR(UDMF_CAPI, "object is nullptr!");
         return UDMF_ERR;
     }
-    std::vector<uint8_t> recordValue;
-    obj->GetValue(ARRAY_BUFFER, recordValue);
-    size_t dataSize = recordValue.size();
-    if (dataSize > MAX_GENERAL_ENTRY_SIZE) {
+    if (!object->GetValue(ARRAY_BUFFER, bytes) || bytes.empty()) {
+        LOG_ERROR(UDMF_CAPI, "Array buffer data is missing or empty.");
+        return UDMF_ERR;
+    }
+    if (bytes.size() > MAX_GENERAL_ENTRY_SIZE) {
         LOG_INFO(UDMF_CAPI, "data size exceeds maximum size");
         return UDMF_ERR;
     }
-    record->recordDataLen = dataSize;
-    if (record->recordData != nullptr) {
-        delete[] record->recordData;
+    return UDMF_E_OK;
+}
+
+static void ReturnGeneralEntry(OH_UdmfRecord* record, unsigned char** entry, unsigned int* count,
+    std::vector<uint8_t>* copy)
+{
+    *entry = record->recordData;
+    *count = record->recordDataLen;
+    if (copy != nullptr) {
+        copy->assign(record->recordData, record->recordData + record->recordDataLen);
     }
-    record->recordData = new (std::nothrow) unsigned char[record->recordDataLen];
-    if (record->recordData == nullptr) {
-        record->recordDataLen = 0;
+}
+
+static std::unique_ptr<unsigned char[]> CopyGeneralEntryBuffer(const std::vector<uint8_t>& bytes)
+{
+    // Preserve the C API's allocation-failure return when exceptions are disabled.
+    auto data = new (std::nothrow) unsigned char[bytes.size()];
+    if (data == nullptr) {
+        return nullptr;
+    }
+    std::unique_ptr<unsigned char[]> buffer(data);
+    std::copy(bytes.begin(), bytes.end(), buffer.get());
+    return buffer;
+}
+
+static int GetGeneralEntry(OH_UdmfRecord* record, const char* typeId, unsigned char** entry, unsigned int* count,
+    std::vector<uint8_t>* copy)
+{
+    if (!IsUnifiedRecordValid(record) || typeId == nullptr || entry == nullptr || count == nullptr) {
+        return UDMF_E_INVALID_PARAM;
+    }
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
+    if (!record->record_->HasType(typeId)) {
+        LOG_ERROR(UDMF_CAPI, "not has typeId");
+        return UDMF_E_INVALID_PARAM;
+    }
+    if (record->recordData != nullptr && record->lastType == typeId) {
+        LOG_DEBUG(UDMF_CAPI, "return cache value");
+        ReturnGeneralEntry(record, entry, count, copy);
+        return UDMF_E_OK;
+    }
+    auto nativeRecord = record->record_;
+    nativeRecord->InitObject();
+    std::vector<uint8_t> bytes;
+    int status = ReadGeneralEntry(nativeRecord, typeId, bytes);
+    if (status != UDMF_E_OK) {
+        LOG_ERROR(UDMF_CAPI, "Get value from valueType failed. result: %{public}d", status);
+        return status;
+    }
+    auto buffer = CopyGeneralEntryBuffer(bytes);
+    if (buffer == nullptr) {
         return UDMF_ERR;
     }
-    auto err = memcpy_s(record->recordData, record->recordDataLen, recordValue.data(), record->recordDataLen);
-    if (err != EOK) {
-        LOG_ERROR(UDMF_CAPI, "memcpy error!");
-        delete[] record->recordData;
-        record->recordData = nullptr;
-        record->recordDataLen = 0;
-        return UDMF_ERR;
-    }
+    delete[] record->recordData;
+    record->recordData = buffer.release();
+    record->recordDataLen = bytes.size();
     record->lastType = typeId;
+    ReturnGeneralEntry(record, entry, count, nullptr);
+    if (copy != nullptr) {
+        copy->swap(bytes);
+    }
     return UDMF_E_OK;
 }
 
 int OH_UdmfRecord_GetGeneralEntry(OH_UdmfRecord* record, const char* typeId, unsigned char** entry, unsigned int* count)
 {
-    if (!IsUnifiedRecordValid(record) || typeId == nullptr || entry == nullptr || count == nullptr) {
-        return UDMF_E_INVALID_PARAM;
-    }
-    std::lock_guard<std::mutex> lock(record->mutex);
-    if (!record->record_->HasType(typeId)) {
-        LOG_ERROR(UDMF_CAPI, "not has typeId");
-        return UDMF_E_INVALID_PARAM;
-    }
-    if (record->lastType == typeId && record->recordData != nullptr) {
-        LOG_DEBUG(UDMF_CAPI, "return cache value");
-        *entry = record->recordData;
-        *count = record->recordDataLen;
-        return UDMF_E_OK;
-    }
-    record->record_->InitObject();
-    auto value = record->record_->GetEntry(typeId);
-    if (!std::holds_alternative<std::shared_ptr<Object>>(value)) {
-        LOG_ERROR(UDMF_CAPI, "Not contains right data type.");
-        return UDMF_ERR;
-    }
-    auto result = GetValueFromUint8Array(record, typeId, value);
-    if (result != UDMF_E_OK) {
-        LOG_ERROR(UDMF_CAPI, "Get value from valueType failed. result: %{public}d", result);
-        return result;
-    }
-    *count = record->recordDataLen;
-    *entry = record->recordData;
-    return UDMF_E_OK;
+    return GetGeneralEntry(record, typeId, entry, count, nullptr);
 }
 
 template<typename T>
 void AddUds(OH_UdmfRecord* record, UdsObject* udsObject, UDType type)
 {
+    std::shared_ptr<Object> object;
+    {
+        std::lock_guard<std::mutex> lock(udsObject->mutex);
+        object = udsObject->obj;
+    }
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
     if (record->record_->GetType() == UD_BUTT) {
-        record->record_ = std::make_shared<T>(type, udsObject->obj);
+        record->record_ = std::make_shared<T>(type, object);
     } else {
-        record->record_->AddEntry(UtdUtils::GetUtdIdFromUtdEnum(type), udsObject->obj);
+        record->record_->AddEntry(UtdUtils::GetUtdIdFromUtdEnum(type), object);
     }
 }
 
@@ -867,6 +922,7 @@ int OH_UdmfRecord_AddAppItem(OH_UdmfRecord* record, OH_UdsAppItem* appItem)
 static int AddVirtualFileUri(OH_UdmfRecord* record, UDType type, const std::shared_ptr<Object>& object,
     const std::shared_ptr<NdkVirtualEntryInfo>& virtualEntry)
 {
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
     if (record->record_->GetType() != UD_BUTT) {
         LOG_ERROR(UDMF_CAPI, "Virtual file URI must be the primary entry of a record");
         return UDMF_E_INVALID_PARAM;
@@ -938,11 +994,14 @@ int OH_UdmfRecord_AddPixelMap(OH_UdmfRecord* record, OH_UdsPixelMap* pixelMap)
 
 int GetUds(OH_UdmfRecord* record, UdsObject* udsObject, UDType type)
 {
-    record->record_->InitObject();
-    auto value = record->record_->GetEntry(UtdUtils::GetUtdIdFromUtdEnum(type));
+    std::lock_guard<std::recursive_mutex> recordLock(record->mutex);
+    auto nativeRecord = record->record_;
+    nativeRecord->InitObject();
+    auto value = nativeRecord->GetEntry(UtdUtils::GetUtdIdFromUtdEnum(type));
     if (!std::holds_alternative<std::shared_ptr<Object>>(value)) {
         return UDMF_ERR;
     }
+    std::lock_guard<std::mutex> objectLock(udsObject->mutex);
     udsObject->obj = std::get<std::shared_ptr<Object>>(value);
     return UDMF_E_OK;
 }
@@ -953,14 +1012,31 @@ int OH_UdmfRecord_AddArrayBuffer(OH_UdmfRecord* record, const char* type, OH_Uds
         IsInvalidUdsObjectPtr(buffer, UDS_ARRAY_BUFFER_STRUCT_ID)) {
         return UDMF_E_INVALID_PARAM;
     }
-    unsigned char *entry;
-    unsigned int size;
-    int ret = OH_UdsArrayBuffer_GetData(buffer, &entry, &size);
-    if (ret != UDMF_E_OK) {
-        return UDMF_E_INVALID_PARAM;
+    std::vector<uint8_t> bytes;
+    {
+        std::lock_guard<std::mutex> lock(buffer->mutex);
+        auto entry = buffer->obj->value_.find(ARRAY_BUFFER);
+        if (entry == buffer->obj->value_.end() ||
+            !std::holds_alternative<std::vector<uint8_t>>(entry->second)) {
+            return UDMF_E_INVALID_PARAM;
+        }
+        const auto& value = std::get<std::vector<uint8_t>>(entry->second);
+        auto length = buffer->obj->value_.find(ARRAY_BUFFER_LENGTH);
+        auto size = value.size();
+        if (length != buffer->obj->value_.end() && std::holds_alternative<int>(length->second)) {
+            int count = std::get<int>(length->second);
+            if (count < 0) {
+                return UDMF_E_INVALID_PARAM;
+            }
+            size = static_cast<size_t>(count);
+        }
+        if (size > value.size() || size > MAX_GENERAL_ENTRY_SIZE) {
+            return UDMF_E_INVALID_PARAM;
+        }
+        bytes.assign(value.begin(), value.begin() + static_cast<int>(size));
+        buffer->obj->value_[UNIFORM_DATA_TYPE] = type;
     }
-    buffer->obj->value_[UNIFORM_DATA_TYPE] = type;
-    return OH_UdmfRecord_AddGeneralEntry(record, type, entry, size);
+    return OH_UdmfRecord_AddGeneralEntry(record, type, bytes.data(), bytes.size());
 }
 
 int OH_UdmfRecord_AddContentForm(OH_UdmfRecord* record, OH_UdsContentForm* contentForm)
@@ -1009,12 +1085,14 @@ int OH_UdmfRecord_GetFileUri(OH_UdmfRecord* record, OH_UdsFileUri* fileUri)
     if (!IsUnifiedRecordValid(record) || IsInvalidUdsObjectPtr(fileUri, UDS_FILE_URI_STRUCT_ID)) {
         return UDMF_E_INVALID_PARAM;
     }
+    std::lock_guard<std::recursive_mutex> recordLock(record->mutex);
     if (GetUds(record, fileUri, UDType::FILE_URI) == UDMF_E_OK) {
         return UDMF_E_OK;
     }
     for (auto fileType : FILE_TYPES) {
         int ret = GetUds(record, fileUri, fileType.second);
         if (ret == UDMF_E_OK) {
+            std::lock_guard<std::mutex> objectLock(fileUri->mutex);
             fileUri->obj->value_[UNIFORM_DATA_TYPE] = UDMF_META_GENERAL_FILE_URI;
             fileUri->obj->value_[FILE_TYPE] = UtdUtils::GetUtdIdFromUtdEnum(fileType.second);
             return UDMF_E_OK;
@@ -1038,14 +1116,15 @@ int OH_UdmfRecord_GetArrayBuffer(OH_UdmfRecord* record, const char* type, OH_Uds
         LOG_ERROR(UDMF_CAPI, "Param is invalid.");
         return UDMF_E_INVALID_PARAM;
     }
-    unsigned int size = 0;
-    unsigned char *entry;
-    int ret = OH_UdmfRecord_GetGeneralEntry(record, type, &entry, &size);
-    if (ret != UDMF_E_OK) {
-        LOG_ERROR(UDMF_CAPI, "OH_UdmfRecord_GetGeneralEntry ret: %{public}d.", ret);
-        return ret;
+    unsigned char* entry = nullptr;
+    unsigned int count = 0;
+    std::vector<uint8_t> bytes;
+    int status = GetGeneralEntry(record, type, &entry, &count, &bytes);
+    if (status != UDMF_E_OK) {
+        LOG_ERROR(UDMF_CAPI, "OH_UdmfRecord_GetGeneralEntry ret: %{public}d.", status);
+        return status;
     }
-    return OH_UdsArrayBuffer_SetData(buffer, entry, size);
+    return OH_UdsArrayBuffer_SetData(buffer, bytes.data(), count);
 }
 
 int OH_UdmfRecord_GetContentForm(OH_UdmfRecord* record, OH_UdsContentForm* contentForm)
@@ -1065,6 +1144,7 @@ OH_UdmfProperty* OH_UdmfProperty_Create(OH_UdmfData* data)
     if (properties == nullptr) {
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(data->mutex);
     properties->properties_ = data->unifiedData_->GetProperties();
     return properties;
 }
@@ -1081,6 +1161,7 @@ const char* OH_UdmfProperty_GetTag(OH_UdmfProperty* properties)
     if (!IsUnifiedPropertiesValid(properties)) {
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(properties->mutex);
     return properties->properties_->tag.c_str();
 }
 
@@ -1097,6 +1178,7 @@ Udmf_ShareOption OH_UdmfProperty_GetShareOption(OH_UdmfProperty* properties)
     if (!IsUnifiedPropertiesValid(properties)) {
         return Udmf_ShareOption::SHARE_OPTIONS_INVALID;
     }
+    std::lock_guard<std::mutex> lock(properties->mutex);
     switch (properties->properties_->shareOptions) {
         case ShareOptions::IN_APP:
             return Udmf_ShareOption::SHARE_OPTIONS_IN_APP;
@@ -1128,6 +1210,7 @@ int OH_UdmfProperty_SetTag(OH_UdmfProperty* properties, const char* tag)
     if (!IsUnifiedPropertiesValid(properties) || tag == nullptr) {
         return UDMF_E_INVALID_PARAM;
     }
+    std::lock_guard<std::mutex> lock(properties->mutex);
     properties->properties_->tag = tag;
     return UDMF_E_OK;
 }
@@ -1245,6 +1328,7 @@ int OH_UdmfRecord_SetProvider(OH_UdmfRecord* record, const char* const* types, u
             udTypes.emplace_back(types[i]);
         }
     }
+    std::lock_guard<std::recursive_mutex> lock(record->mutex);
     record->record_->SetEntryGetter(udTypes, providerBox);
     return UDMF_E_OK;
 }
@@ -1325,6 +1409,7 @@ void OH_UdmfGetDataParams_SetAcceptableInfo(OH_UdmfGetDataParams* params, OH_Udm
         LOG_ERROR(UDMF_CAPI, "Parameter error.");
         return;
     }
+    std::lock_guard<std::mutex> lock(*acceptableInfo->mutex);
     params->acceptableInfo = *acceptableInfo;
 }
 
@@ -1362,6 +1447,7 @@ void OH_UdmfDataLoadParams_SetDataLoadInfo(OH_UdmfDataLoadParams* params, OH_Udm
         LOG_ERROR(UDMF_CAPI, "Parameter error.");
         return;
     }
+    std::lock_guard<std::mutex> lock(*dataLoadInfo->mutex);
     params->dataLoadInfo = *dataLoadInfo;
 }
 
@@ -1391,6 +1477,7 @@ char** OH_UdmfDataLoadInfo_GetTypes(OH_UdmfDataLoadInfo* dataLoadInfo, unsigned 
         LOG_ERROR(UDMF_CAPI, "Parameter error.");
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(*dataLoadInfo->mutex);
     *count = dataLoadInfo->typesCount;
     return dataLoadInfo->typesArray;
 }
@@ -1401,6 +1488,7 @@ void OH_UdmfDataLoadInfo_SetType(OH_UdmfDataLoadInfo* dataLoadInfo, const char* 
         LOG_ERROR(UDMF_CAPI, "Parameter error.");
         return;
     }
+    std::lock_guard<std::mutex> lock(*dataLoadInfo->mutex);
     if (dataLoadInfo->typesCount >= MAX_TYPE_COUNT) {
         LOG_ERROR(UDMF_CAPI, "Types count exceeds limit.");
         return;
@@ -1430,6 +1518,7 @@ int OH_UdmfDataLoadInfo_GetRecordCount(OH_UdmfDataLoadInfo* dataLoadInfo)
         LOG_ERROR(UDMF_CAPI, "Parameter error.");
         return 0;
     }
+    std::lock_guard<std::mutex> lock(*dataLoadInfo->mutex);
     return static_cast<int>(dataLoadInfo->recordsCount);
 }
 
@@ -1439,6 +1528,7 @@ void OH_UdmfDataLoadInfo_SetRecordCount(OH_UdmfDataLoadInfo* dataLoadInfo, unsig
         LOG_ERROR(UDMF_CAPI, "Parameter error.");
         return;
     }
+    std::lock_guard<std::mutex> lock(*dataLoadInfo->mutex);
     dataLoadInfo->recordsCount = recordCount;
 }
 

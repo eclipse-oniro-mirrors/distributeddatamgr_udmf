@@ -70,7 +70,11 @@ static int GetUdsUint8Value(UdsObject* pThis, const char* paramName, const char*
 
 bool IsInvalidUdsObjectPtr(const UdsObject *pThis, int cid)
 {
-    return pThis == nullptr || pThis->cid != cid || pThis->obj == nullptr;
+    if (pThis == nullptr || pThis->cid != cid) {
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(pThis->mutex);
+    return pThis->obj == nullptr;
 }
 
 bool IsInvalidUdsObjectByType(const UdsObject* pThis, const UDType& type)
@@ -145,7 +149,10 @@ static int GetUdsDetails(UdsObject* pThis, OH_UdsDetails* details, NdkStructId n
         return UDMF_E_INVALID_PARAM;
     }
     auto udDetails = ObjectUtils::ConvertToUDDetails(detailObj);
-    ConvertToMap(udDetails, details->details_);
+    std::map<std::string, std::string> values;
+    ConvertToMap(udDetails, values);
+    std::lock_guard<std::mutex> lock(details->mutex);
+    details->details_.swap(values);
     details->isUpdate = true;
     return UDMF_E_OK;
 }
@@ -156,7 +163,12 @@ static int SetUdsDetails(UdsObject* pThis, const OH_UdsDetails* details, NdkStru
         LOG_ERROR(UDMF_CAPI, "invalid para.");
         return UDMF_E_INVALID_PARAM;
     }
-    auto udDetails = ConvertToDetails(details->details_);
+    std::map<std::string, std::string> values;
+    {
+        std::lock_guard<std::mutex> lock(details->mutex);
+        values = details->details_;
+    }
+    auto udDetails = ConvertToDetails(values);
     pThis->obj->value_[DETAILS] = ObjectUtils::ConvertToObject(udDetails);
     return UDMF_E_OK;
 }
@@ -881,6 +893,7 @@ bool OH_UdsDetails_HasKey(const OH_UdsDetails* pThis, const char* key)
         LOG_ERROR(UDMF_CAPI, "invalid para.");
         return false;
     }
+    std::lock_guard<std::mutex> lock(pThis->mutex);
     return pThis->details_.find(key) != pThis->details_.end();
 }
 
@@ -930,6 +943,7 @@ const char* OH_UdsDetails_GetValue(const OH_UdsDetails* pThis, const char* key)
         LOG_ERROR(UDMF_CAPI, "invalid para.");
         return nullptr;
     }
+    std::lock_guard<std::mutex> lock(pThis->mutex);
     auto item = pThis->details_.find(key);
     if (item == pThis->details_.end()) {
         LOG_ERROR(UDMF_CAPI, "not has key.");

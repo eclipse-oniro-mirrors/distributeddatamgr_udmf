@@ -373,7 +373,7 @@ void OH_UDMF_DestroySummary(OH_UDMF_Summary* summary);
  * @see Udmf_ErrCode
  * @since 26.0.1
  */
-int OH_UDMF_GetSummaryOverviewTypes(const OH_UDMF_Summary* summary, const char* const** types,
+int OH_UDMF_GetSummaryOverviewTypes(const OH_UDMF_Summary* summary, const char* const ** types,
     int64_t* count);
 
 /**
@@ -426,7 +426,7 @@ int OH_UDMF_GetSummaryOverviewSize(const OH_UDMF_Summary* summary, const char* t
  * @since 26.0.1
  */
 int OH_UDMF_GetSummaryFilenameExtensions(const OH_UDMF_Summary* summary,
-    const char* const** filenameExtensions, int64_t* count);
+    const char* const ** filenameExtensions, int64_t* count);
 
 /**
  * @brief Defines the callback function used free the context.
