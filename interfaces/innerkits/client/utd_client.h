@@ -16,8 +16,10 @@
 #ifndef UTD_CLIENT_H
 #define UTD_CLIENT_H
 
+#include <condition_variable>
 #include <shared_mutex>
 #include <string>
+#include <thread>
 #include <vector>
 #include <map>
 #include <mutex>
@@ -81,6 +83,11 @@ private:
     int64_t lastLoadTime_ {0};
 
     std::mutex updateUtdMutex_;
+
+    std::mutex retryMutex_;
+    std::condition_variable retryCv_;
+    bool stopRetry_ {false};
+    std::thread retryThread_;
 };
 } // namespace UDMF
 } // namespace OHOS

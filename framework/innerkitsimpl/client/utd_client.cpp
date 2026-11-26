@@ -43,10 +43,20 @@ UtdClient::UtdClient()
 
 UtdClient::~UtdClient()
 {
+    {
+        std::lock_guard<std::mutex> lock(retryMutex_);
+        stopRetry_ = true;
+    }
+    retryCv_.notify_all();
+    if (retryThread_.joinable()) {
+        retryThread_.join();
+    }
 }
 
 UtdClient &UtdClient::GetInstance()
 {
+    // Keep the store alive until the client's retry thread has stopped.
+    CustomUtdStore::GetInstance();
     static UtdClient instance;
     static std::once_flag initFlag;
     std::call_once(initFlag, []() {
@@ -82,16 +92,27 @@ bool UtdClient::ShouldRegisterNotifier()
 
 void UtdClient::WaitRetry(bool tryRegisterNotifier, bool tryInit)
 {
-    std::thread([tryRegisterNotifier, tryInit]() {
+    if (!tryRegisterNotifier && !tryInit) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(retryMutex_);
+    if (stopRetry_ || retryThread_.joinable()) {
+        return;
+    }
+    retryThread_ = std::thread([this, tryRegisterNotifier, tryInit]() {
         bool shouldRegisterNotifier = tryRegisterNotifier;
         bool shouldInit = tryInit;
         int retryCount = 0;
         while (retryCount < MAX_RETRY) {
-            std::this_thread::sleep_for(std::chrono::seconds(RETRY_INTERVAL_SEC));
-            if (shouldRegisterNotifier && UtdClient::GetInstance().RegServiceNotifier() == E_OK) {
+            std::unique_lock<std::mutex> lock(retryMutex_);
+            if (retryCv_.wait_for(lock, std::chrono::seconds(RETRY_INTERVAL_SEC), [this]() { return stopRetry_; })) {
+                return;
+            }
+            lock.unlock();
+            if (shouldRegisterNotifier && RegServiceNotifier() == E_OK) {
                 shouldRegisterNotifier = false;
             }
-            if (shouldInit && UtdClient::GetInstance().InitializeUtdTypes()) {
+            if (shouldInit && InitializeUtdTypes()) {
                 shouldInit = false;
             }
             if (!shouldRegisterNotifier && !shouldInit) {
@@ -102,7 +123,7 @@ void UtdClient::WaitRetry(bool tryRegisterNotifier, bool tryInit)
             ++retryCount;
         }
         LOG_ERROR(UDMF_CLIENT, "Failed after %{public}d attempts.", MAX_RETRY);
-    }).detach();
+    });
 }
 
 bool UtdClient::InitializeUtdTypes()
