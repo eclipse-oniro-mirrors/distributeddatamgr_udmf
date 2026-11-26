@@ -16,6 +16,10 @@
 #include <gtest/gtest.h>
 
 #include <unistd.h>
+#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 #include <thread>
 
 #include "token_setproc.h"
@@ -2699,20 +2703,102 @@ HWTEST_F(UtdClientTest, GetUniformDataTypeByMIMETypeByPrefix003, TestSize.Level1
 }
 
 /**
-* @tc.name: WaitRetry001
-* @tc.desc: Normal testcase of WaitRetry
+* @tc.name: WaitRetry_NoPendingWork_DoesNotStartWorker
+* @tc.desc: No retry worker is needed when initialization and registration succeeded.
 * @tc.type: FUNC
 */
-HWTEST_F(UtdClientTest, WaitRetry001, TestSize.Level1)
+HWTEST_F(UtdClientTest, WaitRetry_NoPendingWork_DoesNotStartWorker, TestSize.Level1)
 {
-    LOG_INFO(UDMF_TEST, "WaitRetry001 begin.");
+    UtdClient client;
+    client.WaitRetry(false, false);
+    EXPECT_FALSE(client.retryThread_.joinable());
+}
 
-    bool tryRegisterNotifier = false;
-    bool tryInit = false;
-    UtdClient::GetInstance().WaitRetry(tryRegisterNotifier, tryInit);
-    EXPECT_FALSE(tryRegisterNotifier);
-    EXPECT_FALSE(tryInit);
-    LOG_INFO(UDMF_TEST, "WaitRetry001 end.");
+/**
+* @tc.name: WaitRetry_AlreadyStarted_KeepsExistingWorker
+* @tc.desc: Repeated requests preserve the existing joinable retry worker.
+* @tc.type: FUNC
+*/
+HWTEST_F(UtdClientTest, WaitRetry_AlreadyStarted_KeepsExistingWorker, TestSize.Level1)
+{
+    UtdClient client;
+    client.WaitRetry(false, true);
+    ASSERT_TRUE(client.retryThread_.joinable());
+    auto workerId = client.retryThread_.get_id();
+
+    client.WaitRetry(true, false);
+
+    EXPECT_TRUE(client.retryThread_.joinable());
+    EXPECT_EQ(client.retryThread_.get_id(), workerId);
+}
+
+/**
+* @tc.name: Destructor_WaitingRetry_StopsWithoutDelay
+* @tc.desc: Destruction cancels the retry interval instead of waiting for its three-second timeout.
+* @tc.type: FUNC
+*/
+HWTEST_F(UtdClientTest, Destructor_WaitingRetry_StopsWithoutDelay, TestSize.Level1)
+{
+    auto client = std::make_unique<UtdClient>();
+    client->WaitRetry(false, true);
+    ASSERT_TRUE(client->retryThread_.joinable());
+
+    auto start = std::chrono::steady_clock::now();
+    client.reset();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+
+    EXPECT_LT(elapsed.count(), 1000);
+}
+
+/**
+* @tc.name: Destructor_ActiveRetry_WaitsForWorker
+* @tc.desc: Destruction cannot finish until the worker has left its active task.
+* @tc.type: FUNC
+*/
+HWTEST_F(UtdClientTest, Destructor_ActiveRetry_WaitsForWorker, TestSize.Level1)
+{
+    std::mutex stateMutex;
+    std::condition_variable stateCv;
+    bool stopObserved = false;
+    bool allowExit = false;
+    bool workerExited = false;
+    bool destructorReturned = false;
+    auto client = new UtdClient();
+    client->retryThread_ = std::thread([client, &stateMutex, &stateCv, &stopObserved, &allowExit, &workerExited]() {
+        std::unique_lock<std::mutex> retryLock(client->retryMutex_);
+        bool stopped = client->retryCv_.wait_for(retryLock, std::chrono::seconds(2), [client]() {
+            return client->stopRetry_;
+        });
+        retryLock.unlock();
+
+        // Keep the task active after it observes shutdown, using state outside UtdClient.
+        std::unique_lock<std::mutex> stateLock(stateMutex);
+        stopObserved = stopped;
+        stateCv.notify_all();
+        stateCv.wait(stateLock, [&allowExit]() { return allowExit; });
+        workerExited = true;
+    });
+    std::thread destructor([client, &stateMutex, &stateCv, &destructorReturned]() {
+        delete client;
+        std::lock_guard<std::mutex> stateLock(stateMutex);
+        destructorReturned = true;
+        stateCv.notify_all();
+    });
+
+    {
+        std::unique_lock<std::mutex> stateLock(stateMutex);
+        EXPECT_TRUE(stateCv.wait_for(stateLock, std::chrono::seconds(1), [&stopObserved]() { return stopObserved; }));
+        EXPECT_FALSE(stateCv.wait_for(stateLock, std::chrono::milliseconds(100), [&destructorReturned]() {
+            return destructorReturned;
+        }));
+        allowExit = true;
+    }
+    stateCv.notify_all();
+    destructor.join();
+
+    EXPECT_TRUE(workerExited);
+    EXPECT_TRUE(destructorReturned);
 }
 
 /**
